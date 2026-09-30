@@ -42,6 +42,7 @@ static void captureDmaIrq(void)
     {
         dma_channel_acknowledge_irq1(CAPTURE_DMA_CHANNEL);
         captureDone = 1;
+        __sev();
     }
 }
 
@@ -87,7 +88,7 @@ void sample(void)
 
     captureDone = 0;
     dma_channel_configure(CAPTURE_DMA_CHANNEL, &cfg, adcBuf, &adc_hw->fifo,
-                          dma_encode_transfer_count(BUFFER_LEN), false);
+                          dma_encode_transfer_count(BUFFER_LEN), true);
 
     adc_run(true);
 

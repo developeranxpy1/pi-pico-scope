@@ -37,6 +37,7 @@ void bspUartRx(char c);
 void bspLcdSelect(bool select);
 void bspLcdReset(bool release);
 void bspLcdBacklight(bool on);
+void bspLcdSetSpiMode(int mode);
 void bspLcdCommand(uint8_t cmd);
 void bspLcdData(const void *data, size_t len);
 void bspLcdDataDma(const uint16_t *data, size_t pixels);

@@ -18,6 +18,7 @@
 #define ST7789_COLMOD  0x3A
 
 #define MADCTL_VALUE   0x60
+#define PANEL_SPI_MODE 0
 
 int16_t _width = LCD_W;
 int16_t _height = LCD_H;
@@ -62,16 +63,19 @@ static void setAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     bspLcdCommand(ST7789_RAMWR);
 }
 
-void panelInit(void)
+static void panelHardwareReset(void)
 {
     bspLcdBacklight(false);
-
     bspLcdReset(false);
     bspDelayMs(20);
     bspLcdReset(true);
     bspDelayMs(120);
-
     bspLcdSelect(true);
+}
+
+static void panelInitSequence(int mode, uint8_t madctl)
+{
+    bspLcdSetSpiMode(mode);
 
     cmd1(ST7789_SWRESET);
     bspDelayMs(150);
@@ -94,7 +98,7 @@ void panelInit(void)
     cmd3(0xC3, 0x09, 0x09);
     cmd3(0xC4, 0x09, 0x09);
 
-    cmd2(ST7789_MADCTL, MADCTL_VALUE);
+    cmd2(ST7789_MADCTL, madctl);
 
     cmd1(ST7789_INVON);
     bspDelayMs(10);
@@ -109,6 +113,12 @@ void panelInit(void)
 
     bspLcdSelect(false);
     bspLcdBacklight(true);
+}
+
+void panelInit(void)
+{
+    panelHardwareReset();
+    panelInitSequence(PANEL_SPI_MODE, MADCTL_VALUE);
 }
 
 void panelFlush(void)
@@ -148,4 +158,41 @@ void panelSelfTest(void)
     }
 
     printf("panel: self test done\n");
+}
+
+void panelProbe(void)
+{
+    static const struct {
+        uint8_t mode;
+        uint8_t madctl;
+        uint16_t color;
+        const char *name;
+    } cfgs[] = {
+        {0, 0x60, ST7789_RED,    "mode0 madctl 0x60"},
+        {1, 0x60, ST7789_GREEN,  "mode3 madctl 0x60"},
+        {0, 0x00, ST7789_BLUE,   "mode0 madctl 0x00"},
+        {1, 0x00, ST7789_YELLOW, "mode3 madctl 0x00"},
+    };
+    const unsigned n = sizeof(cfgs) / sizeof(cfgs[0]);
+
+    printf("probe: %u configs, each 2s\n", n);
+
+    for (unsigned i = 0; i < n; i++)
+    {
+        panelHardwareReset();
+        panelInitSequence(cfgs[i].mode, cfgs[i].madctl);
+
+        for (int p = 0; p < LCD_W * LCD_H; p++)
+            frameBuffer[p] = cfgs[i].color;
+        panelFlush();
+
+        bspLedSet(true);
+        printf("probe %u/%u: %-20s colour 0x%04X\n", i + 1, n, cfgs[i].name, cfgs[i].color);
+        fflush(stdout);
+        bspDelayMs(2000);
+        bspLedSet(false);
+    }
+
+    bspLcdBacklight(false);
+    printf("probe: done - if one bar held steady, that config works\n");
 }

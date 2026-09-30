@@ -95,6 +95,14 @@ void bspLcdBacklight(bool on)
     gpio_put(PIN_LCD_BL, on);
 }
 
+void bspLcdSetSpiMode(int mode)
+{
+    if (mode)
+        spi_set_format(lcdSpi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    else
+        spi_set_format(lcdSpi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+}
+
 void bspLcdCommand(uint8_t cmd)
 {
     gpio_put(PIN_LCD_DC, 0);
@@ -111,7 +119,7 @@ void bspLcdDataDma(const uint16_t *data, size_t pixels)
 {
     (void)pixels;
     gpio_put(PIN_LCD_DC, 1);
-    spi_write_blocking(lcdSpi, data, pixels * sizeof(uint16_t));
+    spi_write_blocking(lcdSpi, (const uint8_t *)data, pixels * sizeof(uint16_t));
 }
 
 void printFloat(float v, int decimalDigits, char s[])

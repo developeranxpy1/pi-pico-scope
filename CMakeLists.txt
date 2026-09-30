@@ -19,6 +19,18 @@ add_executable(pi-pico-scope
     src/ui.c
 )
 
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    OUTPUT_VARIABLE FW_GIT_SHA
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(NOT FW_GIT_SHA)
+    set(FW_GIT_SHA "nogit")
+endif()
+
+target_compile_definitions(pi-pico-scope PRIVATE FW_VERSION="${FW_GIT_SHA}")
+
 target_include_directories(pi-pico-scope PRIVATE src)
 
 target_link_libraries(pi-pico-scope
@@ -34,7 +46,6 @@ target_link_libraries(pi-pico-scope
     hardware_watchdog
     pico_stdio
     pico_stdio_usb
-    tinyusb_device
 )
 
 pico_enable_stdio_usb(pi-pico-scope 1)

@@ -19,6 +19,15 @@ int main(void)
     printf("scopeInit ok\n");
     fflush(stdout);
 
+    clearDisplay();
+    setTextSize(2);
+    setCursor(6, 100);
+    printString("FW " FW_VERSION);
+    panelFlush();
+    printf("firmware version: %s\n", FW_VERSION);
+    fflush(stdout);
+    bspDelayMs(2500);
+
     panelSelfTest();
     printf("self test done, entering main loop\n");
 

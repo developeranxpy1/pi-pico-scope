@@ -4,6 +4,7 @@
 #include "bsp.h"
 #include "gfx.h"
 #include "panel.h"
+#include "panel_smoke.h"
 #include "scope.h"
 
 int main(void)
@@ -14,6 +15,9 @@ int main(void)
 
     bspInit();
     printf("bsp ok\n");
+    fflush(stdout);
+
+    panelSmokeTest();
 
     scopeInit();
     printf("scopeInit ok\n");

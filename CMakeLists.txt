@@ -14,6 +14,7 @@ add_executable(pi-pico-scope
     src/bsp.c
     src/gfx.c
     src/panel_st7789.c
+    src/panel_smoke.c
     src/scope.c
     src/wave.c
     src/ui.c

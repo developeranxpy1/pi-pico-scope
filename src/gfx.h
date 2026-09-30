@@ -1,0 +1,34 @@
+#ifndef GFX_H
+#define GFX_H
+
+#include <stdint.h>
+
+#include "panel.h"
+
+extern int16_t _width;
+extern int16_t _height;
+
+void drawPixel(int16_t x, int16_t y, uint16_t color);
+
+void clearDisplay(void);
+
+void drawBitmap(int16_t x0, int16_t y0, int16_t w, int16_t h, int16_t stride, const uint16_t *bmap);
+void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color);
+void drawFastHLine(int16_t x, int16_t y, int16_t l, uint16_t color);
+
+void drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
+void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+
+void drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
+              uint16_t bg, uint8_t size_x, uint8_t size_y);
+void setCursor(int16_t x, int16_t y);
+void setTextColor(uint16_t c, uint16_t bg);
+void setTextSize(uint16_t s);
+
+void printInt(int v);
+void writeChar(char c);
+void printString(const char *s);
+
+#endif

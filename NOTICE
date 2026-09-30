@@ -1,0 +1,22 @@
+pi-pico-scope
+Copyright (c) 2026 Anxpy1
+
+This product includes software derived from:
+
+  pillScopePlus
+  https://github.com/tvlad1234/pillScopePlus
+  Copyright (c) 2022 the pillScopePlus contributors
+  Licensed under the Apache License, Version 2.0
+
+Derived files (src/scope.c, src/scope.h, src/wave.c, src/wave.h, src/ui.c,
+src/ui.h, src/gfx.c, src/gfx.h, src/font.h, src/splash.h, and the boot logo):
+
+  - Hardware abstraction removed: STM32F4 HAL calls were replaced with RP2040
+    (Pico SDK) equivalents.
+  - ADC timebase reworked: timer-triggered ADC plus DMA was replaced by RP2040
+    hardware free-run sampling with a programmed clock divider, FIFO, and DMA.
+  - Display driver changed from ST7735 128x160 to ST7789 240x240.
+  - UI layout redesigned for the 240x240 panel.
+  - drawFastHLine/drawFastVLine off-by-one corrected; drawBitmap takes an
+    explicit stride.
+  - printf replaced with printInt for on-screen output.

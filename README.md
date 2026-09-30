@@ -30,6 +30,10 @@ SPI0 runs at 20 MHz (lowered from 40 MHz to eliminate the colour glitches you
 observed), SPI mode 0, and the driver waits 10 ms after each full-screen flush
 because of the colour-transition issue you found.
 
+The init sequence and CS handling follow your proven MicroPython driver: CS is
+toggled per command/parameter rather than held low across the whole sequence,
+and pixel data is sent high byte first.
+
 ### Scope hardware
 
 | Function        | GP  | Notes                                        |

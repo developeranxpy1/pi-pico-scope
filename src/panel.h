@@ -19,6 +19,5 @@
 void panelInit(void);
 void panelFlush(void);
 void panelSelfTest(void);
-void panelProbe(void);
 
 #endif

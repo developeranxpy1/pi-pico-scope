@@ -19,8 +19,8 @@ int main(void)
     printf("scopeInit ok\n");
     fflush(stdout);
 
-    panelProbe();
-    printf("probe done, entering main loop\n");
+    panelSelfTest();
+    printf("self test done, entering main loop\n");
 
     while (1)
     {

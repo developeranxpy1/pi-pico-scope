@@ -78,6 +78,16 @@ void bspUartWrite(const char *data, size_t len)
     uart_write_blocking(uart1, data, len);
 }
 
+void bspLcdSetDc(uint8_t dc)
+{
+    gpio_put(PIN_LCD_DC, dc);
+}
+
+void spi_write_bytes(const void *data, size_t len)
+{
+    spi_write_blocking(lcdSpi, (const uint8_t *)data, len);
+}
+
 void bspLcdSelect(bool select)
 {
     gpio_put(PIN_LCD_CS, !select);
@@ -93,33 +103,6 @@ void bspLcdBacklight(bool on)
     gpio_init(PIN_LCD_BL);
     gpio_set_dir(PIN_LCD_BL, GPIO_OUT);
     gpio_put(PIN_LCD_BL, on);
-}
-
-void bspLcdSetSpiMode(int mode)
-{
-    if (mode)
-        spi_set_format(lcdSpi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
-    else
-        spi_set_format(lcdSpi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-}
-
-void bspLcdCommand(uint8_t cmd)
-{
-    gpio_put(PIN_LCD_DC, 0);
-    spi_write_blocking(lcdSpi, &cmd, 1);
-}
-
-void bspLcdData(const void *data, size_t len)
-{
-    gpio_put(PIN_LCD_DC, 1);
-    spi_write_blocking(lcdSpi, data, len);
-}
-
-void bspLcdDataDma(const uint16_t *data, size_t pixels)
-{
-    (void)pixels;
-    gpio_put(PIN_LCD_DC, 1);
-    spi_write_blocking(lcdSpi, (const uint8_t *)data, pixels * sizeof(uint16_t));
 }
 
 void printFloat(float v, int decimalDigits, char s[])

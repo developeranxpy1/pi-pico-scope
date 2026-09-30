@@ -1,6 +1,5 @@
 #include "bsp.h"
 
-#include <hardware/dma.h>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/spi.h>
@@ -10,8 +9,6 @@
 
 
 static spi_inst_t *const lcdSpi = spi0;
-
-static int lcdDmaChannel = -1;
 
 static void uartIrqHandler(void)
 {
@@ -51,8 +48,6 @@ void bspInit(void)
     gpio_init(PIN_LCD_RST);
     gpio_set_dir(PIN_LCD_RST, GPIO_OUT);
     gpio_put(PIN_LCD_RST, 1);
-
-    lcdDmaChannel = dma_claim_unused_channel(true);
 
     uart_init(uart1, UART_BAUD);
     uart_set_format(uart1, 8, 1, 0);
@@ -114,16 +109,9 @@ void bspLcdData(const void *data, size_t len)
 
 void bspLcdDataDma(const uint16_t *data, size_t pixels)
 {
-    dma_channel_config_t cfg = dma_channel_get_default_config(lcdDmaChannel);
-    channel_config_set_read_increment(&cfg, true);
-    channel_config_set_write_increment(&cfg, false);
-    channel_config_set_dreq(&cfg, spi_get_dreq(lcdSpi, true));
-    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
-
+    (void)pixels;
     gpio_put(PIN_LCD_DC, 1);
-    dma_channel_configure(lcdDmaChannel, &cfg, (void *)data, &spi_get_hw(lcdSpi)->dr,
-                          dma_encode_transfer_count((uint)pixels), true);
-    dma_channel_wait_for_finish_blocking(lcdDmaChannel);
+    spi_write_blocking(lcdSpi, data, pixels * sizeof(uint16_t));
 }
 
 void printFloat(float v, int decimalDigits, char s[])

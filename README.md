@@ -123,8 +123,17 @@ original, those were corrected, and `drawBitmap` now takes an explicit stride so
 bitmaps of one width can be drawn on a framebuffer of another.
 
 **Console output.** The UI no longer uses newlib `printf`; integers go through
-`printInt` so nothing has to be routed to a `_write` handler. `sprintf` is still
-used for the UART formats.
+`printInt` and are drawn straight into the framebuffer. `sprintf` is still used
+for the UART formats. Separately, `printf` now goes to **USB CDC** (visible as a
+second COM port) purely for boot diagnostics, so the on-screen text is unaffected.
+
+**Debugging.** At boot the firmware prints a log to USB CDC and runs
+`panelSelfTest()`, which flashes six full-screen colour bars (red, green, blue,
+white, black, yellow) for 500 ms each while blinking the onboard LED. Seeing the
+bars means SPI and the init sequence are working and any remaining problem is in
+the UI; staying white means the panel never accepted the commands. Build TinyUSB
+submodule (`git submodule update --init --depth 1 lib/tinyusb` in pico-sdk) or
+USB CDC will fail to link.
 
 **USB CDC** was already unused upstream and has not been ported; the UART path
 is the only data output.
@@ -138,10 +147,14 @@ places to need adjustment:
 1. **ST7789 init sequence** in `src/panel_st7789.c`. The register values follow
    the common Waveshare/LilyGO sequence for a 240x240 ST7789. If the screen is
    blank, dim, or the colours are wrong, this is the first thing to change.
-2. **MADCTL orientation** (`MADCTL_VALUE` in the same file). Set to `0x00`. If
-   the image is rotated or mirrored, try `0x60`, `0xC0`, or `0xA0`. Some modules
-   need `MADCTL_BGR` (0x08) added for correct colour order.
-3. **ST7789 is not the panel you first mentioned.** The Nokia 105 2G 2023
+2. **MADCTL orientation** (`MADCTL_VALUE` in the same file). Set to `0x60` for
+   landscape. If the image is rotated or mirrored, try `0xC0`, `0xA0`, or `0x00`.
+   Note that rotation values change orientation only - they cannot fix an
+   all-white panel. For wrong colour order add the BGR bit, e.g. `0x68`.
+3. **SPI mode** is CPOL=0/CPHA=0 (`src/bsp.c`). If the panel stays white with
+   correct wiring and a known-good init sequence, mode 3 is the next thing to
+   try - some modules are sensitive to it.
+4. **ST7789 is not the panel you first mentioned.** The Nokia 105 2G 2023
    (TA-1557) screen is a 128x64 reflective monochrome panel with a raw FPC
    connector and an unknown controller. Driving it needs its pinout and its init
    sequence, and the UI would need a monochrome layout. All display access goes

@@ -18,5 +18,6 @@
 
 void panelInit(void);
 void panelFlush(void);
+void panelSelfTest(void);
 
 #endif

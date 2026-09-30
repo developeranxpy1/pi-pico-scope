@@ -32,6 +32,12 @@ target_link_libraries(pi-pico-scope
     hardware_timer
     hardware_uart
     hardware_watchdog
+    pico_stdio
+    pico_stdio_usb
+    tinyusb_device
 )
+
+pico_enable_stdio_usb(pi-pico-scope 1)
+pico_enable_stdio_uart(pi-pico-scope 0)
 
 pico_add_extra_outputs(pi-pico-scope)

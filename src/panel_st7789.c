@@ -1,5 +1,7 @@
 #include <hardware/dma.h>
 
+#include <stdio.h>
+
 #include "bsp.h"
 #include "gfx.h"
 #include "panel.h"
@@ -15,7 +17,7 @@
 #define ST7789_MADCTL  0x36
 #define ST7789_COLMOD  0x3A
 
-#define MADCTL_VALUE   0x00
+#define MADCTL_VALUE   0x60
 
 int16_t _width = LCD_W;
 int16_t _height = LCD_H;
@@ -123,4 +125,27 @@ void drawPixel(int16_t x, int16_t y, uint16_t color)
     if (x < 0 || x >= _width || y < 0 || y >= _height)
         return;
     frameBuffer[y * _width + x] = color;
+}
+void panelSelfTest(void)
+{
+    static const uint16_t bars[] = {
+        ST7789_RED, ST7789_GREEN, ST7789_BLUE,
+        ST7789_WHITE, ST7789_BLACK, ST7789_YELLOW,
+    };
+    static const char names[] = "RGBWY";
+
+    printf("panel: self test, %dx%d, blocking SPI\n", LCD_W, LCD_H);
+
+    for (unsigned i = 0; i < sizeof(bars) / sizeof(bars[0]); i++)
+    {
+        for (int p = 0; p < LCD_W * LCD_H; p++)
+            frameBuffer[p] = bars[i];
+        panelFlush();
+        bspLedSet(true);
+        printf("panel: bar %c = 0x%04X\n", names[i], bars[i]);
+        bspDelayMs(500);
+        bspLedSet(false);
+    }
+
+    printf("panel: self test done\n");
 }

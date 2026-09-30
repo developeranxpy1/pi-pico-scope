@@ -35,6 +35,7 @@ float measuredFreq, sigPer;
 float offsetVoltage = 1.6540283;
 
 static volatile uint8_t captureDone;
+volatile uint8_t captureTimedOut;
 
 static void captureDmaIrq(void)
 {
@@ -92,8 +93,14 @@ void sample(void)
 
     adc_run(true);
 
-    while (!captureDone)
+    for (uint32_t guard = 0; !captureDone && guard < 4000000u; guard++)
+    {
         __wfe();
+    }
+
+    captureTimedOut = !captureDone;
+    if (captureTimedOut)
+        captureDone = 1;
 
     adc_run(false);
     adc_fifo_drain();

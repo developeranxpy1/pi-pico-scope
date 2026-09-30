@@ -4,7 +4,6 @@
 #include "bsp.h"
 #include "gfx.h"
 #include "panel.h"
-#include "panel_smoke.h"
 #include "scope.h"
 
 int main(void)
@@ -17,11 +16,18 @@ int main(void)
     printf("bsp ok\n");
     fflush(stdout);
 
-    panelSmokeTest();
+
+    bspLedSet(true);
+    bspDelayMs(120);
+    bspLedSet(false);
 
     scopeInit();
     printf("scopeInit ok\n");
     fflush(stdout);
+
+    bspLedSet(true);
+    bspDelayMs(120);
+    bspLedSet(false);
 
     clearDisplay();
     setTextSize(2);
@@ -34,6 +40,11 @@ int main(void)
 
     panelSelfTest();
     printf("self test done, entering main loop\n");
+    fflush(stdout);
+
+    bspLedSet(true);
+    bspDelayMs(120);
+    bspLedSet(false);
 
     while (1)
     {

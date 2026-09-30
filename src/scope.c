@@ -5,6 +5,8 @@
 #include <hardware/sync.h>
 #include <hardware/watchdog.h>
 
+#include <string.h>
+
 #include "bsp.h"
 #include "gfx.h"
 #include "scope.h"
@@ -61,6 +63,9 @@ static void applySampleRate(void)
 
 void scopeInit(void)
 {
+    memset(adcBuf, 0, sizeof(adcBuf));
+
+#if ENABLE_CAPTURE
     adc_init();
     adc_gpio_init(PIN_ADC_IN);
     adc_select_input(0);
@@ -68,17 +73,24 @@ void scopeInit(void)
 
     dma_channel_set_irq1_enabled(CAPTURE_DMA_CHANNEL, true);
     irq_set_exclusive_handler(dma_get_irq_num(1), captureDmaIrq);
+#endif
 
     panelInit();
 
     splash();
 
     sampRate = (uint32_t)((PIXDIV * 1000000.0f) / tdiv);
+#if ENABLE_CAPTURE
     applySampleRate();
+#endif
 }
 
 void sample(void)
 {
+#if !ENABLE_CAPTURE
+    return;
+#endif
+
     adc_fifo_drain();
 
     dma_channel_config_t cfg = dma_channel_get_default_config(CAPTURE_DMA_CHANNEL);

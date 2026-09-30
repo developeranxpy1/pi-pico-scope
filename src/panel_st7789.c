@@ -104,6 +104,8 @@ void panelInit(void)
 
 void panelFlush(void)
 {
+    setAddrWindow(0, 0, LCD_W - 1, LCD_H - 1);
+
     bspLcdSelect(true);
     bspLcdSetDc(1);
     spi_write_bytes(frameBuffer, sizeof(frameBuffer));

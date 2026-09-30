@@ -108,7 +108,13 @@ void panelFlush(void)
 
     bspLcdSelect(true);
     bspLcdSetDc(1);
-    spi_write_bytes(frameBuffer, sizeof(frameBuffer));
+    for (size_t off = 0; off < sizeof(frameBuffer); off += 2048)
+    {
+        size_t n = sizeof(frameBuffer) - off;
+        if (n > 2048)
+            n = 2048;
+        spi_write_bytes((const uint8_t *)frameBuffer + off, n);
+    }
     bspLcdSelect(false);
     bspDelayMs(LCD_FLUSH_SETTLE_MS);
 }

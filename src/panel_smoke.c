@@ -62,6 +62,18 @@ static void initPanel(uint8_t colmod)
 
 static void paintRgb565(uint16_t color)
 {
+    cmd(0x2A);
+    {
+        static const uint8_t w[4] = {0x00, 0x00, 0x00, 0xEF};
+        tx(1, w, 4);
+    }
+    cmd(0x2B);
+    {
+        static const uint8_t w[4] = {0x00, 0x00, 0x00, 0xEF};
+        tx(1, w, 4);
+    }
+    cmd(0x2C);
+
     for (unsigned i = 0; i < sizeof(chunk); i += 2)
     {
         chunk[i] = (uint8_t)(color >> 8);
@@ -81,12 +93,13 @@ void panelSmokeTest(void)
         uint16_t color;
         const char *name;
     } sweep[] = {
-        {0x0000, "BLACK"},
         {0xFFFF, "WHITE"},
+        {0x0000, "BLACK"},
         {0xF800, "RED"},
         {0x07E0, "GREEN"},
         {0x001F, "BLUE"},
         {0x5555, "GREY"},
+        {0x0000, "BLACK-AGAIN"},
     };
     const unsigned n = sizeof(sweep) / sizeof(sweep[0]);
 
@@ -101,7 +114,7 @@ void panelSmokeTest(void)
         bspLedSet(true);
         printf("smoke: %d/%u %s 0x%04X\n", i + 1, n, sweep[i].name, sweep[i].color);
         fflush(stdout);
-        bspDelayMs(2500);
+        bspDelayMs(3000);
         bspLedSet(false);
     }
 

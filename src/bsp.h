@@ -22,6 +22,7 @@
 #define PIN_UART_RX   5
 
 #define LCD_SPI_BAUD_HZ      20000000u
+#define LCD_USE_SOFT_SPI     1
 #define LCD_FLUSH_SETTLE_MS  10
 #define UART_BAUD            9600
 

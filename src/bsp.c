@@ -33,10 +33,20 @@ void bspInit(void)
         gpio_pull_up(buttons[i]);
     }
 
+#if LCD_USE_SOFT_SPI
+    gpio_init(PIN_LCD_SCK);
+    gpio_set_dir(PIN_LCD_SCK, GPIO_OUT);
+    gpio_put(PIN_LCD_SCK, 0);
+
+    gpio_init(PIN_LCD_MOSI);
+    gpio_set_dir(PIN_LCD_MOSI, GPIO_OUT);
+    gpio_put(PIN_LCD_MOSI, 0);
+#else
     spi_init(lcdSpi, LCD_SPI_BAUD_HZ);
     spi_set_format(lcdSpi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_set_function(PIN_LCD_MOSI, GPIO_FUNC_SPI);
     gpio_set_function(PIN_LCD_SCK, GPIO_FUNC_SPI);
+#endif
 
     gpio_init(PIN_LCD_CS);
     gpio_set_dir(PIN_LCD_CS, GPIO_OUT);
@@ -85,7 +95,22 @@ void bspLcdSetDc(uint8_t dc)
 
 void spi_write_bytes(const void *data, size_t len)
 {
-    spi_write_blocking(lcdSpi, (const uint8_t *)data, len);
+    const uint8_t *p = (const uint8_t *)data;
+
+#if LCD_USE_SOFT_SPI
+    for (size_t i = 0; i < len; i++)
+    {
+        uint8_t b = p[i];
+        for (int bit = 7; bit >= 0; bit--)
+        {
+            gpio_put(PIN_LCD_MOSI, (b >> bit) & 1u);
+            gpio_put(PIN_LCD_SCK, 1);
+            gpio_put(PIN_LCD_SCK, 0);
+        }
+    }
+#else
+    spi_write_blocking(lcdSpi, p, len);
+#endif
 }
 
 void bspLcdSelect(bool select)

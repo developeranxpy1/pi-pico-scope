@@ -59,6 +59,8 @@ static void setAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     d[3] = (uint8_t)(y1 & 0xFF);
     cmd1(ST7789_RASET);
     writeTransaction(1, d, 4);
+
+    cmd1(ST7789_RAMWR);
 }
 
 static void fillFramebuf(uint16_t color)

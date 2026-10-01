@@ -273,7 +273,7 @@ void settingsBar(void)
     else
         printInt((int)tdiv / 1000);
 
-    if (bspButtonDown(PIN_BTN_UP))
+    if (bspButtonDown(PIN_BTN_UP) || bspButtonDown(PIN_NAV_UP))
     {
         if (sel == 0)
         {
@@ -305,7 +305,7 @@ void settingsBar(void)
         bspDelayMs(150);
     }
 
-    if (bspButtonDown(PIN_BTN_DOWN))
+    if (bspButtonDown(PIN_BTN_DOWN) || bspButtonDown(PIN_NAV_DOWN))
     {
         if (sel == 0)
         {
@@ -337,202 +337,23 @@ void settingsBar(void)
         bspDelayMs(150);
     }
 
-    if (bspButtonDown(PIN_BTN_SEL))
+    if (bspButtonDown(PIN_BTN_SEL) || bspButtonDown(PIN_NAV_RIGHT))
     {
         sel++;
         bspDelayMs(150);
     }
+
+    /* Nav pad LEFT steps back through the five settings, wrapping at zero.
+       SELECT and RIGHT both step forward, so either hand works. */
+    if (bspButtonDown(PIN_NAV_LEFT))
+    {
+        sel = (sel == 0) ? 4 : sel - 1;
+        bspDelayMs(150);
+    }
+
     if (sel > 4)
         sel = 0;
 }
-
-/*
-    printFloat(minVoltage, 1, st);
-    setCursor(MENU_X + MENU_PAD, 12);
-    printString(st);
-
-    printFloat(maxVoltage, 1, st);
-    setCursor(MENU_X + MENU_PAD, 36);
-    printString(st);
-
-    printFloat(maxVoltage - minVoltage, 1, st);
-    setCursor(MENU_X + MENU_PAD, 60);
-    printString(st);
-
-    setCursor(MENU_X + MENU_PAD, 84);
-    if (measuredFreq >= 1000)
-    {
-        printInt((int)(measuredFreq / 1000));
-        printString("k");
-    }
-    else
-        printInt((int)measuredFreq);
-
-    setTextColor(WHITE, BLACK);
-}
-
-void settingsBar(void)
-{
-    static uint8_t sel = 0;
-    char st[15];
-
-    const int colX[5] = {0, 32, 64, 96, 128};
-
-    setTextSize(1);
-    if (sel == 0)
-        setTextColor(BLACK, WHITE);
-    else if (topClip || bottomClip)
-        setTextColor(ST7789_RED, BLACK);
-    else
-        setTextColor(WHITE, BLACK);
-
-    setCursor(colX[0], BAR_Y + 1);
-    printString("V");
-
-    setTextColor(WHITE, BLACK);
-    setCursor(colX[1], BAR_Y + 1);
-    printString("T");
-
-    setCursor(colX[2], BAR_Y + 1);
-    printString("S");
-
-    setCursor(colX[3], BAR_Y + 1);
-    printString("A");
-
-    setCursor(colX[4], BAR_Y + 1);
-    printString("D");
-
-    if (sel == 1)
-    {
-        setTextColor(BLACK, WHITE);
-        drawFastHLine(0, (int16_t)((PIXDIV * YDIV / 2 - 1) - (trigVoltage * PIXDIV / vdiv)), PLOT_W, ST7789_RED);
-    }
-
-    setTextSize(1);
-    setTextColor(WHITE, BLACK);
-
-    if (sel == 0)
-        setTextColor(BLACK, WHITE);
-    printFloat(vdiv, 1, st);
-    setCursor(colX[0], BAR_Y + 11);
-    printString(st);
-    printString("V");
-
-    setTextColor(WHITE, BLACK);
-    if (sel == 1)
-        setTextColor(BLACK, WHITE);
-    printFloat(trigVoltage, 1, st);
-    setCursor(colX[1], BAR_Y + 11);
-    printString(st);
-
-    setTextColor(WHITE, BLACK);
-    if (sel == 2)
-        setTextColor(BLACK, WHITE);
-    setCursor(colX[2], BAR_Y + 11);
-    if (trig == RISING)
-        printString("Rise");
-    else
-        printString("Fall");
-
-    setTextColor(WHITE, BLACK);
-    if (sel == 3)
-        setTextColor(BLACK, WHITE);
-    setCursor(colX[3], BAR_Y + 11);
-    printInt(atten);
-    printString("x");
-
-    setTextColor(WHITE, BLACK);
-    if (sel == 4)
-        setTextColor(BLACK, WHITE);
-    setCursor(colX[4], BAR_Y + 11);
-    if (tdiv < 1000)
-    {
-        printInt((int)tdiv);
-        printString("u");
-    }
-    else
-    {
-        printFloat(tdiv / 1000.0, 1, st);
-        printString(st);
-        printString("m");
-    }
-
-    setTextSize(1);
-    setTextColor(WHITE, BLACK);
-    setCursor(0, BAR_Y + 22);
-    printString("U/D edit SEL next");
-
-    if (bspButtonDown(PIN_BTN_UP))
-    {
-        if (sel == 0)
-        {
-            if (vdiv > 0.5)
-                vdiv -= 0.5;
-        }
-        else if (sel == 1)
-        {
-            trigVoltage -= 0.1;
-        }
-        else if (sel == 2)
-        {
-            trig = FALLING;
-        }
-        else if (sel == 3)
-        {
-            atten = 1;
-        }
-        else if (sel == 4)
-        {
-            if (tdivIndex > 0)
-            {
-                tdivIndex--;
-                tdiv = tdivTable[tdivIndex];
-                scopeSetTdiv((uint32_t)((PIXDIV * 1000000.0f) / tdiv));
-            }
-        }
-        bspDelayMs(150);
-    }
-
-    if (bspButtonDown(PIN_BTN_DOWN))
-    {
-        if (sel == 0)
-        {
-            if (vdiv < 9)
-                vdiv += 0.5;
-        }
-        else if (sel == 1)
-        {
-            trigVoltage += 0.1;
-        }
-        else if (sel == 2)
-        {
-            trig = RISING;
-        }
-        else if (sel == 3)
-        {
-            atten = 10;
-        }
-        else if (sel == 4)
-        {
-            if ((size_t)(tdivIndex + 1) < TDIV_STEPS)
-            {
-                tdivIndex++;
-                tdiv = tdivTable[tdivIndex];
-                scopeSetTdiv((uint32_t)((PIXDIV * 1000000.0f) / tdiv));
-            }
-        }
-        bspDelayMs(150);
-    }
-
-    if (bspButtonDown(PIN_BTN_SEL))
-    {
-        sel++;
-        bspDelayMs(150);
-    }
-    if (sel > 4)
-        sel = 0;
-}
-*/
 
 void ui(void)
 {

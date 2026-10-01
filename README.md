@@ -71,6 +71,10 @@ to send data to another, using a clock wire to say when each bit goes out.
 | UP button     | GP15|                             |
 | SELECT button | GP16|                             |
 | DOWN button   | GP17|                             |
+| Nav UP        | GP18| Optional 4-way pad            |
+| Nav DOWN      | GP19| Optional 4-way pad            |
+| Nav LEFT      | GP20| Optional 4-way pad            |
+| Nav RIGHT     | GP21| Optional 4-way pad            |
 | LED           | GP25| Lights up when a signal is found |
 
 
@@ -209,6 +213,20 @@ You have three buttons. Here's the whole thing:
 | **UP + DOWN** together| Runs auto-calibration (see below)           |
 | **All three** together| Restarts everything from scratch            |
 
+You can also fit a **four-way navigation pad** on **GP18, GP19, GP20 and
+GP21** (in that order: UP, DOWN, LEFT, RIGHT). It is optional — if you don't
+use it, nothing changes.
+
+| Nav key | What it does                                   |
+|---------|------------------------------------------------|
+| **LEFT** | Move back to the previous setting (wraps round)|
+| **RIGHT**| Move on to the next setting — same as SELECT   |
+| **UP**   | Increase the setting — same as the UP button   |
+| **DOWN** | Decrease the setting — same as the DOWN button |
+
+This means you can use the pad alone for everything except auto-calibration and
+the factory reset, which still need the original three buttons.
+
 The five settings you can change, and what they do:
 
 | Letter | Name       | What it does                                              |
@@ -245,11 +263,19 @@ What's on the screen
 |               | Freq  |   <- how many times per second
 |               | Trig  |   <- says "Trig" if it found a wave
 +---------------+-------+
-| V    T    S    A    D  |   <- which setting you picked
-| 2.0V 0.0V Rise 1x  20u  |   <- what each one is set to
-| U/D edit SEL next       |   <- a reminder of the buttons
-+------------------------+
+| Vdiv  Trig  Slope  Atten  us/d  |   <- the five setting names
+| 2.0V  0.0   Rise   1x    20     |   <- what each one is set to
++----------------------------------+
 ```
+
+There are five settings across the bottom in a fixed row. The one you have
+picked is drawn with its background flipped (black on white) so you can see at a
+glance which one the buttons will change. If the wave is running off the top or
+bottom of the screen, the `Vdiv` name turns red as a warning.
+
+> **Note:** an older revision of the code drew this row as single letters
+> (`V T S A D`) with an extra hint line underneath. That version is commented out
+> and **is not** what runs. The picture above is the real one.
 
 **Min, Max, Ppk.** The lowest and highest voltages in one wave. `Ppk` means
 "peak to peak" — it is just Max minus Min, which tells you how big the wave is.

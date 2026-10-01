@@ -19,6 +19,14 @@
 #define PIN_BTN_UP    15
 #define PIN_BTN_SEL   16
 #define PIN_BTN_DOWN  17
+
+/* Four-way navigation pad on GP18..GP21, in the order wired: UP, DOWN, LEFT,
+   RIGHT. LEFT/RIGHT move the settings-bar selection; UP/DOWN change the value.
+   Additive: the original three buttons keep working exactly as before. */
+#define PIN_NAV_UP    18
+#define PIN_NAV_DOWN  19
+#define PIN_NAV_LEFT  20
+#define PIN_NAV_RIGHT 21
 #define PIN_LED       25
 
 #define PIN_UART_TX   4

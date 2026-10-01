@@ -27,7 +27,8 @@ void bspInit(void)
     gpio_set_dir(PIN_LED, GPIO_OUT);
     gpio_put(PIN_LED, 0);
 
-    const int buttons[] = { PIN_BTN_UP, PIN_BTN_SEL, PIN_BTN_DOWN };
+    const int buttons[] = { PIN_BTN_UP, PIN_BTN_SEL, PIN_BTN_DOWN,
+                             PIN_NAV_UP, PIN_NAV_DOWN, PIN_NAV_LEFT, PIN_NAV_RIGHT };
     for (unsigned i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++)
     {
         gpio_init(buttons[i]);

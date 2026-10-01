@@ -31,8 +31,9 @@ UP, SELECT, and DOWN.
 
 **4. One LED** — we steal the LED that is already soldered onto the Pico.
 
-**5. A tiny circuit board** for the analog part (called the *frontend*, explained
-below). This is the hard part. Details are in "The one hard bit" further down.
+**5. Four resistors and an op-amp** for the analog part (called the *frontend*):
+two 68k, two 500k, and one LM358. Cheapest to buy, hardest to get right. See
+"The one hard bit: resistors and the frontend" below.
 
 > If you only have the Pico and the screen, the screen will light up but will
 > always show a flat line, because there is no way to read electricity yet.
@@ -71,6 +72,78 @@ to send data to another, using a clock wire to say when each bit goes out.
 | SELECT button | GP16|                             |
 | DOWN button   | GP17|                             |
 | LED           | GP25| Lights up when a signal is found |
+
+
+The one hard bit: resistors and the frontend
+--------------------------------------------
+
+**Short answer: yes, the analog mode needs resistors.** Without them you'll get
+a flat line or a badly squashed one, and it isn't a software fault.
+
+### Why you can't just wire the signal straight in
+
+Two reasons, and both are hard limits of the Pico's measuring chip (the **ADC**):
+
+1. **It can only read 0 to 3.3 volts.** It physically cannot see a negative
+   voltage — it just reports zero. A normal sine wave sits half above and half
+   below zero volts, so you'd see only the top half, squashed flat.
+2. **3.3 V is the entire range.** Anything bigger than 3.3 V pegs the reading.
+
+So we need to do two things to the signal before the Pico looks at it: **halve
+it** (so it fits) and **lift it up by 1.65 V** (so it sits in the middle of the
+range, where it has the most room). That 1.65 V becomes our new "zero".
+
+### What you need
+
+| Part             | Value  | What it does                                     |
+|------------------|--------|--------------------------------------------------|
+| 2 resistors      | 68k    | Make a **1.65 V** reference — our new "zero"     |
+| 2 resistors      | 500k   | **Halve** whatever you are measuring              |
+| 1 op-amp         | LM358  | Buffers, so measuring doesn't disturb the circuit |
+
+How it works: the two 68k resistors sit across 3.3 V and make 1.65 V right down
+the middle (3.3 x 68/136 = 1.65 V). The two 500k resistors halve your incoming
+signal. The LM358 then holds that steady so the Pico doesn't load down whatever
+you are measuring.
+
+The software takes care of the rest. It subtracts the 1.65 V and doubles the
+result, which puts your real voltage back:
+
+```c
+return 2 * (((3.3 * samp) / 4096.0) - offsetVoltage);
+```
+
+Check it with the maths: if your signal is **+1 V**, it arrives halved (0.5 V)
+and lifted (2.15 V), and the formula gives back **1.0 V**. Correct.
+
+> **After building the frontend, run auto-calibration.** It measures any small
+> offset error and remembers the correction. Short the input to ground first,
+> then hold **UP + DOWN**.
+
+### Do I need them for logic analyser mode?
+
+**Usually not.** Digital signals are already sitting between 0 and 3.3 V, so
+you can wire them straight into **GP26, GP27, GP28 and GP29** and skip the
+frontend completely.
+
+Two warnings:
+
+* **Never feed it 5 volts.** The Pico's pins are 3.3 V only and are **not**
+  5 V tolerant — 5 V will damage the chip. Use a resistor divider or a level
+  shifter for 5 V logic.
+* **Put about 1k in series anyway**, just as insurance against a short or a
+  mixed-up wire. It costs nothing and it saves the pin.
+
+### ⚠️ Safety
+
+**Do not share a ground between the Pico and the circuit you're probing.**
+
+While the Pico is plugged into USB, its ground is joined to your computer's
+ground. If you also join that to a mains-powered circuit, you have connected
+your PC to mains through the ground wire. That is genuinely dangerous.
+
+Power the thing you are testing from a battery or an isolated supply while you
+probe it.
 
 
 Making it (building)

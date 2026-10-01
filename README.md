@@ -1,228 +1,314 @@
 pi-pico-scope
 =============
 
-A port of [pillScopePlus](https://github.com/tvlad1234/pillScopePlus) from the
-STM32F401 "Black Pill" to the **Raspberry Pi Pico (RP2040)**, driving an
-**ST7735 128x160 SPI TFT** in landscape.
+A **cheap oscilloscope** made from a Raspberry Pi Pico.
 
-The oscilloscope logic (triggering, waveform measurements, graticule, UI, and
-the TekScope serial formats) is derived from the original project. The hardware
-layer, ADC timebase and display driver were written for RP2040.
+An oscilloscope is a tool that draws electricity on a screen, so you can *see*
+what a signal looks like. This one plugs into a circuit, listens to the voltage,
+and draws it as a moving line.
 
-Hardware
---------
+This project is a copy of an older project called
+[pillScopePlus](https://github.com/tvlad1234/pillScopePlus). That one ran on a
+different chip (an STM32F401). This version runs on a Raspberry Pi Pico, which
+is a tiny, cheap computer on a small circuit board.
 
-### Display (ST7735 128x160, SPI, driven landscape 160x128)
+Everything works: it draws the signal, measures it, tells you the frequency,
+and can save captures to a computer.
 
-| Pico pin | GP  | Signal        | Notes                                    |
-|----------|-----|---------------|------------------------------------------|
-| 1        | 0   | LEDA          | Backlight enable, driven HIGH at boot    |
-| 2        | 1   | CS            | Chip select, active low                  |
-| 4        | 2   | DC            | Data / command                           |
-| 5        | 3   | RST           | Hardware reset, active low               |
-| 9        | 6   | SCK           | SPI0 clock                               |
-| 10       | 7   | MOSI          | SPI0 data                                |
-| 8        | -   | LEDK          | Backlight cathode                        |
-| 3        | -   | GND           | Common ground                            |
-| 40       | -   | 5V (VBUS)     | Module has its own 3.3V regulator         |
 
-SPI0 runs at 20 MHz (`LCD_SPI_BAUD_HZ`) in mode 0, lowered from 40 MHz to
-eliminate colour glitches. Pixels are pushed over DMA channel 0, MSB first, and
-CS is toggled per command/parameter rather than held low across a sequence.
+What you need
+-------------
 
-The panel is addressed in **landscape**: `LCD_W 160` / `LCD_H 128`, so the
-128x160 portrait panel is rotated rather than re-plumbed. `panelInit()` runs the
-standard ST7735 sequence (`SWRESET`, `SLPOUT`, frame-rate/power/gamma tables,
-`INVOFF`, `NORON`, `DISPON`), sets `COLMOD = 0x05` for 16-bit RGB565, applies
-`MADCTL = 0xC8` for the portrait pass, then switches to `landscapeMadctl`
-(`0xA0`) and sets the address window to `0,0,159,127`.
+You must buy these parts. They are not included.
 
-> `LCD_FLUSH_SETTLE_MS` in `src/bsp.h` is **0**, so `panelFlush()` does not pause
-> between frames. The 10 ms post-flush settle delay that used to work around a
-> colour-transition artefact has been removed; that constant is the knob to turn
-> if the artefact returns.
+**1. Raspberry Pi Pico** — the little brain. Any version works.
 
-### Scope hardware
+**2. A small screen** — an **ST7735**, which is 128 pixels wide and 160 pixels
+tall. This one costs about $4.
 
-| Function        | GP  | Notes                                        |
-|-----------------|-----|----------------------------------------------|
-| Analog input    | 26  | ADC channel 0, 0-3.3 V                       |
-| Up button       | 15  | Internal pull-up, active low                 |
-| Select button   | 16  | Internal pull-up, active low                 |
-| Down button     | 17  | Internal pull-up, active low                 |
-| Onboard LED     | 25  | Lit while the trace is triggered             |
-| UART TX         | 4   | 9600 8N1, captured waveforms                 |
-| UART RX         | 5   | 9600 8N1, command input                      |
+**3. Some buttons** — four of them. Two would be hard to use, so we use three:
+UP, SELECT, and DOWN.
 
-**You still need the analog frontend.** The RP2040 ADC can only measure
-0 - 3.3 V, so the input must be attenuated by 2x and biased to ~1.65 V, exactly
-as in the original (two 68k resistors for the reference, two 500k for the
-attenuator, LM358 buffer). Feed the frontend output to GP26, and remember the
-scope and the device under test must **not** share a ground reference.
+**4. One LED** — we steal the LED that is already soldered onto the Pico.
 
-Building
---------
+**5. A tiny circuit board** for the analog part (called the *frontend*, explained
+below). This is the hard part. Details are in "The one hard bit" further down.
+
+> If you only have the Pico and the screen, the screen will light up but will
+> always show a flat line, because there is no way to read electricity yet.
+
+
+Wiring it up
+------------
+
+On the Pico, every wire has a number. The numbers are called **pins**, and they
+are printed on the board, like `GP26`. Connect things to them like this:
+
+### The screen
+
+| Pico pin | Number | To what       | What it does                    |
+|----------|--------|---------------|---------------------------------|
+| 1        | GP0    | Backlight +   | Turns the screen's light on     |
+| 2        | GP1    | CS            | Says "I'm talking to the screen" |
+| 4        | GP2    | DC            | Tells screen data or command    |
+| 5        | GP3    | RST           | Resets the screen               |
+| 9        | GP6    | SCK           | The clock wire                  |
+| 10       | GP7    | MOSI          | The data wire                   |
+| 3        | GND    | Ground        | Shared "0 volts"                |
+| 40       | 5V     | Power         | Gives the screen electricity    |
+
+Also connect **pin 8** to the screen's **LEDK** (backlight minus).
+
+The screen talks to the Pico using **SPI**. SPI is just a fast way for one chip
+to send data to another, using a clock wire to say when each bit goes out.
+
+### The buttons and LED
+
+| What          | Pin | Note                        |
+|---------------|-----|-----------------------------|
+| Analog input  | GP26| Where the signal comes in   |
+| UP button     | GP15|                             |
+| SELECT button | GP16|                             |
+| DOWN button   | GP17|                             |
+| LED           | GP25| Lights up when a signal is found |
+
+
+Making it (building)
+--------------------
+
+You turn the code into a file the Pico can run. That file is called a **UF2**
+file, and it ends in `.uf2`.
+
+You need two things installed first:
+
+* **CMake** — a tool that helps build projects.
+* **gcc-arm-none-eabi** — the compiler for small chips like the Pico.
+
+The Raspberry Pi also publishes free code called the **Pico SDK**, which has all
+the low-level instructions for talking to the chip. Download it, then:
 
 ```bash
-export PICO_SDK_PATH=/path/to/pico-sdk
+export PICO_SDK_PATH=/path/to/pico-sdk   # point at where you put the SDK
 cmake -S . -B build
 cmake --build build -j4
 ```
 
-Output: `build/pi-pico-scope.uf2` - hold BOOTSEL, plug the Pico in, copy the file
-to the `RPI-RP2` drive. It unmounts on its own and the Pico reboots.
+When it finishes, you get `build/pi-pico-scope.uf2`. That is the file we need.
 
-Requires `gcc-arm-none-eabi` and CMake 3.13+. Builds warning-free at
-~88 KB flash / ~44 KB RAM (the 160x128 RGB565 framebuffer is 40 KB of that).
+One extra step, only once: the SDK needs one more piece of free code called
+TinyUSB. Inside the SDK folder run:
 
-The TinyUSB submodule must be initialised (`git submodule update --init --depth 1
-lib/tinyusb` in pico-sdk) or the USB CDC boot log will fail to link.
+```bash
+git submodule update --init --depth 1 lib/tinyusb
+```
 
-CMake options for isolating hardware problems, all `OFF` by default:
+Skip this and the build will fail. That is normal, not your fault.
 
-| Option                                  | Effect                                  |
-|-----------------------------------------|-----------------------------------------|
-| `PI_PICO_SCOPE_PANEL_PROBE`             | Run the display probe at boot, no UI    |
-| `PI_PICO_SCOPE_SLOW_SPI_PROBE`          | 250 kHz software SPI for the probe      |
-| `PI_PICO_SCOPE_REFERENCE_SPI_PROBE`     | 20 MHz hardware SPI0 for the probe      |
-| `PI_PICO_SCOPE_CONSTANT_COLOR_TEST`     | Minimal reference colour loop           |
 
-Using the scope
----------------
+Putting it on the Pico
+----------------------
 
-* **Select** cycles through V, T, S, A, D - V/div, trigger level, slope,
-  attenuation, timebase.
-* **Up** / **Down** adjust the selected parameter.
-* **Up + Down** together enter auto-calibration (couple the probe to ground
-  first). **All three** together resets the device.
+The Pico cannot read files from a computer. Instead, it pretends to be a
+tiny USB stick.
 
-Serial commands, on UART1 at 9600 baud:
+1. **Hold down the BOOTSEL button** on the Pico. This is the little button near
+   the USB plug.
+2. **Plug the Pico into the computer** — keep holding BOOTSEL.
+3. A USB drive called **`RPI-RP2`** appears. Let go of BOOTSEL now.
+4. **Drag `pi-pico-scope.uf2` onto it.**
 
-* `s` - CSV of the capture, for the Tektronix TekScope app
-* `S` - full raw capture for the companion ingest app
-* `F` - half-buffer capture (faster) for the companion ingest app
+That is it. The drive disappears on its own, and the Pico restarts with your new
+code. You don't have to unplug anything.
 
-The companion app is at https://github.com/tvlad1234/tekscopeIngest and should
-work unchanged, since the wire format is preserved.
+> **Important:** don't edit files on GitHub's website while you have unpushed
+> changes here. It has silently emptied the README before.
 
-Screen layout
--------------
 
-Plot geometry comes from `src/scope.h` (`PIXDIV 16`, `XDIV 8`, `YDIV 6`), giving
-a 128 x 96 trace area with 8 x 6 divisions, a stats menu at `MENU_X` (= 128) and
-the settings bar at `BAR_Y` (= 96):
+Using it
+--------
+
+You have three buttons. Here's the whole thing:
+
+| What you press        | What happens                                |
+|-----------------------|---------------------------------------------|
+| **SELECT**            | Moves to the next setting                   |
+| **UP** / **DOWN**     | Makes the chosen setting bigger or smaller |
+| **UP + DOWN** together| Runs auto-calibration (see below)           |
+| **All three** together| Restarts everything from scratch            |
+
+The five settings you can change, and what they do:
+
+| Letter | Name       | What it does                                              |
+|--------|------------|-----------------------------------------------------------|
+| **V**  | V/div      | How tall the wave is drawn. Bigger number = smaller wave. |
+| **T**  | Trigger    | The voltage level the wave must cross to be drawn.        |
+| **S**  | Slope      | Draw it on the way up (Rise) or down (Fall).               |
+| **A**  | Atten      | How much to shrink the signal: 1x or 10x.                  |
+| **D**  | Timebase   | How much time fits on the screen.                          |
+
+**Why is there a "trigger"?** Because electricity is always moving and the
+screen can't keep up. So we wait for the signal to cross a line you choose, and
+*then* we start drawing. That's why the picture stands still instead of sliding
+around. Without a trigger, the wave would never sit still.
+
+**Auto-calibration** fixes one problem: the Pico's wires might not be quite
+right, so a "0 volts" reading could actually be 0.05 volts off. To fix this,
+**short the signal wire to ground first** (touch the tip to the ground wire),
+then hold **UP + DOWN**. It'll measure how far off it is and remember the
+correction.
+
+The **LED lights up** when a signal is found. If it's off, the scope can't see
+anything.
+
+
+What's on the screen
+--------------------
 
 ```
 +---------------+-------+
-|               | Min   |
-|  trace area   | Max   |
-|  128 x 96     | Ppk   |
-|  8 x 6 divs   | Freq  |
-|               | Trig  |
+|               | Min   |   <- smallest voltage seen
+|  your wave    | Max   |   <- biggest voltage seen
+|  drawn here   | Ppk   |   <- Max minus Min
+|               | Freq  |   <- how many times per second
+|               | Trig  |   <- says "Trig" if it found a wave
 +---------------+-------+
-| V    T    S    A    D  |      BAR_Y + 1
-| 2.0V 0.0V Rise 1x  20u  |      BAR_Y + 11
-| U/D edit SEL next       |      BAR_Y + 22
+| V    T    S    A    D  |   <- which setting you picked
+| 2.0V 0.0V Rise 1x  20u  |   <- what each one is set to
+| U/D edit SEL next       |   <- a reminder of the buttons
 +------------------------+
 ```
 
-The bar labels are single letters with the value under each at a fixed 32 px
-pitch, drawn entirely at **1x font**. An earlier revision used `setTextSize(2)`
-for the value row; that was a debugging change, since reverted to
-pillScopePlus's native 1x layout.
+**Min, Max, Ppk.** The lowest and highest voltages in one wave. `Ppk` means
+"peak to peak" — it is just Max minus Min, which tells you how big the wave is.
 
-Because `gfx.c` drew one pixel too many in `drawFastHLine`/`drawFastVLine` in the
-original, those were corrected, and `drawBitmap` now takes an explicit stride so
-bitmaps of one width can be drawn on a framebuffer of another.
+**Freq.** How many times the wave goes up and down in one second. If it says
+`1.0k`, that is 1,000 times per second. The suffix tells you the units: `Hz`
+means times per second, `kHz` means thousands, `mHz` means millions.
 
-Console output
---------------
+**U/D** means "up and down". The line at the bottom is just reminding you that UP
+and DOWN change the setting, and SELECT moves to the next one.
 
-The UI does not use newlib `printf`; integers go through `printInt` and are drawn
-straight into the framebuffer. `sprintf` is still used for the UART formats.
-Separately, `printf` goes to **USB CDC** (a second COM port) purely for boot
-diagnostics, so on-screen text is unaffected. USB CDC was unused upstream and
-has not been ported; UART is the only data output.
 
-At boot the firmware prints a log to USB CDC and runs `panelSelfTest()`, which
-flashes six full-screen colour bars (red, green, blue, white, black, yellow) for
-500 ms each while blinking the onboard LED. Seeing the bars means SPI and the
-init sequence work and any remaining problem is in the UI; staying white means
-the panel never accepted the commands.
+Getting captures onto a computer
+--------------------------------
 
-Differences from the STM32 original
------------------------------------
+Plug a USB-to-serial cable into **GP4** (TX) and **GP5** (RX), at 9600 baud.
+Then you can type letters into a serial terminal program:
 
-**Sample timebase.** The original drove the ADC from a hardware timer through
-DMA. RP2040 has no ADC trigger input, so this project uses the chip's hardware
-**free-run mode** with a programmed clock divider (`adc_run` +
-`adc_set_clkdiv`). Samples are paced in hardware and pushed into RAM by DMA on
-channel 1 with zero CPU involvement during capture. `applySampleRate()` reads the
-achieved rate back from the ADC clock and derives `sampPer` from it, so timing
-measurements stay honest even when the requested rate rounds imperfectly.
+| Type | What you get                                                        |
+|------|----------------------------------------------------------------------|
+| `s`  | A spreadsheet-style file (CSV) — opens in Excel. For Tektronix software. |
+| `S`  | Every single sample number. Bigger and slower.                        |
+| `F`  | Half as many samples. Faster, for quick checks.                       |
 
-`ADC_MIN_PERIOD_TICKS` is 96, the minimum conversion period, which gives about
-1.3 MSa/s of headroom on a 125 MHz ADC clock. Maximum rate is therefore about
-**1.0 MSa/s**, versus 1.6 MSa/s on the STM32, so the fastest timebase is
-**20 us/div** rather than 10 us/div. The timebase follows the usual 1-2-5
-sequence:
+`CSV` just means a plain text file where commas separate the values, so any
+spreadsheet program can open it.
+
+
+How it works inside
+-------------------
+
+You do not need to read this part to use the scope. It just explains what's going
+on, in case you're curious or something breaks.
+
+**Reading the signal.** The Pico has a chip inside called an **ADC** (analog-to-digital
+converter) that measures voltage. It can only measure 0 to 3.3 volts, so the
+**frontend** board does two jobs: it makes the signal safe (so you don't blow
+anything up) and it shifts a signal centred on 0V up to sit in the middle of
+0–3.3V, which is the only range the ADC can read.
+
+**Filling the memory fast.** Electricity changes way faster than the Pico's
+brain can write things down one at a time. So the ADC runs on its own clock, and
+the results get dumped into memory by **DMA** (Direct Memory Access), which is
+hardware that copies data without asking the brain for help. The brain isn't even
+involved. That's why the readings are accurate.
+
+**Speed.** The fastest setting is about **1 million readings per second**. There
+are 9 timebase settings:
 
 ```
-20, 50, 100, 250, 500, 1000, 2500, 5000, 10000 us/div
+20, 50, 100, 250, 500, 1000, 2500, 5000, 10000 microseconds per division
 ```
 
-`BUFFER_LEN` is 256 samples - two screens' worth at `PLOT_W`, so the trigger
-search can look ahead of the point it finds.
+`us/div` means "microseconds across one square of the grid". The shorter that is,
+the faster the wave looks.
 
-**Display.** ST7735 128x160 in portrait became ST7735 128x160 driven in
-landscape, and the framebuffer is 40 KB rather than 115 KB. All display access
-goes through `src/panel.h` (`panelInit`, `panelFlush`, `panelSelfTest`,
-`panelProbe`) so another controller can be added later without touching `gfx.c`,
-`wave.c` or `ui.c`.
+**The bug we fixed.** Each capture takes 256 readings. At the slowest timebase
+that takes 160 milliseconds to collect — but the code was only waiting 100 ms
+before giving up. So it gave up early, and half the screen showed leftover data
+from the previous capture. That's what made the wave look like it was wobbling
+about once a second. The waiting time now matches the timebase.
 
-Known issues
-------------
+**Trigger, again.** Raw noise near the trigger line could make the scope think the
+wave crossed when it didn't, so the picture jumped around. We fixed this by
+requiring the signal to move clearly past the line before it counts as a
+crossing. It is called **hysteresis** — the same idea as a door that needs a
+push to open and a bigger push to shut.
 
-1. **`src/panel_st7789.c` is misnamed** - it is an ST7735 driver. Left alone to
-   avoid touching a working display build; renaming is a mechanical follow-up
-   that needs a matching edit to `CMakeLists.txt`.
-2. **`printFreq()` in `src/ui.c` is dead code** - a `setTextSize(2)` frequency
-   readout that is never called.
 
-If you change `PIXDIV`, `XDIV` or `YDIV` in `src/scope.h`, keep
-`PLOT_W + MENU_W <= LCD_W` and `PLOT_H + BAR_H <= LCD_H` or the menu and bar run
-off the edge. `ui.c` also hardcodes the bar row offsets (`BAR_Y + 1`, `+ 11`,
-`+ 22`) and the 32 px column pitch, so widening the trace area needs a matching
-pass over those.
+Troubleshooting
+---------------
 
-Things to check on hardware
----------------------------
+**The screen stays white.**
+The screen never got the go-ahead. Try, in order: check the wires; try
+**SPI mode 3** instead of mode 0 (some cheap screens insist on it); check that
+the screen really is an ST7735.
 
-These cannot be verified without the physical panel and are the most likely
-places to need adjustment:
+**The screen is sideways or mirrored.**
+Find `landscapeMadctl` in `src/panel_st7789.c` and try `0xC0`, `0x60` or `0x00`
+instead of `0xA0`. If you change this, also swap the numbers in the address
+window right below it. Rotating will not fix a white screen — it only turns the
+picture.
 
-1. **ST7735 init sequence** in `src/panel_st7789.c`. The register values follow
-   the common Waveshare/LilyGO ST7735 sequence. If the screen is blank, dim, or
-   the colours are wrong, this is the first thing to change.
-2. **MADCTL orientation** - the symbols are `portraitMadctl` (`0xC8`) and
-   `landscapeMadctl` (`0xA0`, via `ST7735_BLACKTAB_ROTATION_1`). If the image is
-   rotated or mirrored, change `landscapeMadctl` to `0xC0`, `0x60` or `0x00` and
-   swap the address window that follows it to match. Rotation values change
-   orientation only - they cannot fix an all-white panel. For wrong colour order,
-   add the BGR bit, e.g. `0xA8`.
-3. **SPI mode** is CPOL=0/CPHA=0 by default; `bspLcdSetSpiMode(1)` selects mode 3.
-   If the panel stays white with correct wiring and a known-good init sequence,
-   mode 3 is the next thing to try - some modules are sensitive to it.
-4. **Trigger hysteresis.** `TRIG_HYST` in `src/wave.c` must exceed the noise on
-   the analog input without exceeding the signal's downward excursion from the
-   trigger level. Too small and the trace jitters; too large and the trigger
-   never re-arms and the frequency reading drops to 0.
+**The colours are swapped (red looks blue).**
+Add the "swap red and blue" bit to that same number. Try `0xA8`.
 
-Licensing
----------
+**The picture keeps flickering.**
+There's too much noise on the signal. Try a shorter wire, or move the ground
+wire. If it's the clip warning flickering, that's a separate small bug we fixed.
 
-`src/scope.c`, `src/wave.c`, `src/ui.c`, `src/gfx.c`, `src/font.h`, `src/splash.h`
-and the boot logo are derived from **pillScopePlus**, which is licensed under the
-**Apache License 2.0**. See `LICENSE-APACHE-2.0` and `NOTICE`. Those files cannot
-be relicensed as MIT; if you want a single licence for the whole repository,
-Apache-2.0 is the safe choice.
+**The wave won't sit still.**
+The trigger level (T) is probably sitting right where the noise is. Move it so
+it's on a flat part of the wave instead of on a jumpy part. There is also a
+setting called `TRIG_HYST` in `src/wave.c` you can turn up if there's a lot of
+noise — but don't turn it up too far, or the scope will stop finding waves
+altogether.
+
+**No signal at all, just a flat line.**
+Check the frontend first — it's the most likely culprit. Then check the input is
+actually on GP26. Then try raising the attenuation (A) to 10x if the signal is
+small.
+
+**The frequency says 0.**
+It didn't find two crossings, so it can't work out a period. Usually means the
+signal is too small or too noisy. Try moving the trigger level.
+
+**The build fails about TinyUSB.**
+You skipped the `git submodule update` step. See "Making it".
+
+**It built, but nothing happens.**
+Check the BOOTSEL steps — a UF2 copied to the wrong drive does nothing.
+
+
+Two small things left over
+--------------------------
+
+* `src/panel_st7789.c` is **misnamed**. It drives an ST7735, not an ST7789. It
+  was left alone so the working version wouldn't break.
+* `printFreq()` in `src/ui.c` is **dead code** — written but never called.
+  Harmless. It can be deleted.
+
+
+Credits
+-------
+
+The scope logic, the display drawing, the buttons, the measurements and the
+startup logo all come from **pillScopePlus**, which is free to use under the
+**Apache License 2.0**. Files like `src/scope.c`, `src/wave.c`, `src/ui.c`,
+`src/gfx.c` and `src/splash.h` are that borrowed work and **cannot** be changed
+to a different licence.
+
+If you want one licence for the whole repository, **Apache-2.0** is the safe
+choice, because it covers everything including the borrowed parts.
+
+This project also uses the **Raspberry Pi Pico SDK**, which is free to use.

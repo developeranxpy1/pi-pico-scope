@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <pico/time.h>
 
 #include "bsp.h"
 #include "gfx.h"
@@ -195,6 +196,27 @@ void sideInfo(void)
     setTextColor(WHITE, BLACK);
 }
 
+/* Button handling used to block on bspDelayMs(150) after every press. That
+   froze the entire scope - capture included - for 150 ms, which is why moving
+   through the settings felt slow and dragged the frame rate down. Debounce is
+   now time-based and non-blocking: the UI keeps running full speed and a press
+   is simply ignored until the gap expires. */
+#define NAV_GAP_US 40000u
+static uint32_t lastNavUs;
+
+static int navEdge(int pin, uint32_t gapUs)
+{
+    if (!bspButtonDown(pin))
+        return 0;
+
+    uint32_t now = time_us_32();
+    if ((int32_t)(now - lastNavUs) < (int32_t)gapUs)
+        return 0;
+
+    lastNavUs = now;
+    return 1;
+}
+
 void settingsBar(void)
 {
     static uint8_t sel = 0;
@@ -273,7 +295,7 @@ void settingsBar(void)
     else
         printInt((int)tdiv / 1000);
 
-    if (bspButtonDown(PIN_BTN_UP) || bspButtonDown(PIN_NAV_UP))
+    if (navEdge(PIN_BTN_UP, NAV_GAP_US) || navEdge(PIN_NAV_UP, NAV_GAP_US))
     {
         if (sel == 0)
         {
@@ -302,10 +324,9 @@ void settingsBar(void)
                 tdiv -= 10;
             scopeSetTdiv((uint32_t)((PIXDIV * 1000000.0f) / tdiv));
         }
-        bspDelayMs(150);
     }
 
-    if (bspButtonDown(PIN_BTN_DOWN) || bspButtonDown(PIN_NAV_DOWN))
+    if (navEdge(PIN_BTN_DOWN, NAV_GAP_US) || navEdge(PIN_NAV_DOWN, NAV_GAP_US))
     {
         if (sel == 0)
         {
@@ -334,29 +355,54 @@ void settingsBar(void)
                 tdiv += 10;
             scopeSetTdiv((uint32_t)((PIXDIV * 1000000.0f) / tdiv));
         }
-        bspDelayMs(150);
     }
 
-    if (bspButtonDown(PIN_BTN_SEL) || bspButtonDown(PIN_NAV_RIGHT))
+    if (navEdge(PIN_BTN_SEL, NAV_GAP_US) || navEdge(PIN_NAV_RIGHT, NAV_GAP_US))
     {
         sel++;
-        bspDelayMs(150);
     }
 
     /* Nav pad LEFT steps back through the five settings, wrapping at zero.
        SELECT and RIGHT both step forward, so either hand works. */
-    if (bspButtonDown(PIN_NAV_LEFT))
+    if (navEdge(PIN_NAV_LEFT, NAV_GAP_US))
     {
         sel = (sel == 0) ? 4 : sel - 1;
-        bspDelayMs(150);
     }
 
     if (sel > 4)
         sel = 0;
 }
 
+/* Frame timing, so the real refresh rate can be read from the USB log instead
+   of guessed. The full-screen SPI push alone costs 16.38 ms at 20 MHz, which
+   caps the frame rate at 61 fps however fast the drawing is. */
+#define FRAME_DIAG_PERIOD 32
+static uint32_t fRenderSum, fFlushSum, fCount;
+
+static void frameStats(uint32_t renderUs, uint32_t flushUs)
+{
+    fRenderSum += renderUs;
+    fFlushSum += flushUs;
+    if (++fCount < FRAME_DIAG_PERIOD)
+        return;
+
+    uint32_t frames = fCount;
+    uint32_t renderAvg = fRenderSum / frames;
+    uint32_t flushAvg = fFlushSum / frames;
+    fRenderSum = 0;
+    fFlushSum = 0;
+    fCount = 0;
+
+    uint32_t totalAvg = renderAvg + flushAvg;
+    printf("[fps] render=%lu us  flush=%lu us  total=%lu us  => %lu fps\r\n",
+           (unsigned long)renderAvg, (unsigned long)flushAvg,
+           (unsigned long)totalAvg,
+           (unsigned long)(totalAvg ? 1000000u / totalAvg : 0));
+}
+
 void ui(void)
 {
+    uint32_t tStart = time_us_32();
     clearDisplay();
 
     if (bspButtonDown(PIN_BTN_UP) && bspButtonDown(PIN_BTN_DOWN))
@@ -378,6 +424,7 @@ void ui(void)
     traceScreen();
     sideInfo();
     settingsBar();
+    uint32_t tRender = time_us_32();
 
     if (outputFlag)
     {
@@ -393,7 +440,9 @@ void ui(void)
         }
     }
 
+    uint32_t tFlushStart = time_us_32();
     panelFlush();
+    frameStats(tRender - tStart, time_us_32() - tFlushStart);
 }
 
 void outputSerial(const char *s, uint8_t o)

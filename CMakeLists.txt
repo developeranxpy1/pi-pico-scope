@@ -9,16 +9,30 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-add_executable(pi-pico-scope
-    src/main.c
-    src/bsp.c
-    src/gfx.c
-    src/panel_st7789.c
-    src/panel_smoke.c
-    src/scope.c
-    src/wave.c
-    src/ui.c
-)
+option(PI_PICO_SCOPE_PANEL_PROBE "Run ST7789 display probe at boot" OFF)
+option(PI_PICO_SCOPE_SLOW_SPI_PROBE "Use 250 kHz software SPI for the panel probe" OFF)
+option(PI_PICO_SCOPE_REFERENCE_SPI_PROBE "Use 20 MHz hardware SPI0 for the panel probe" OFF)
+option(PI_PICO_SCOPE_CONSTANT_COLOR_TEST "Run the minimal reference color loop" OFF)
+
+if(PI_PICO_SCOPE_CONSTANT_COLOR_TEST)
+    set(PI_PICO_SCOPE_SOURCES
+        src/panel_constant_color.c
+        src/bsp.c
+    )
+else()
+    set(PI_PICO_SCOPE_SOURCES
+        src/main.c
+        src/bsp.c
+        src/gfx.c
+        src/panel_st7789.c
+        src/panel_smoke.c
+        src/scope.c
+        src/wave.c
+        src/ui.c
+    )
+endif()
+
+add_executable(pi-pico-scope ${PI_PICO_SCOPE_SOURCES})
 
 execute_process(
     COMMAND git rev-parse --short HEAD
@@ -31,6 +45,18 @@ if(NOT FW_GIT_SHA)
 endif()
 
 target_compile_definitions(pi-pico-scope PRIVATE FW_VERSION="${FW_GIT_SHA}")
+if(PI_PICO_SCOPE_PANEL_PROBE)
+    target_compile_definitions(pi-pico-scope PRIVATE PI_PICO_SCOPE_PANEL_PROBE=1)
+endif()
+if(PI_PICO_SCOPE_SLOW_SPI_PROBE)
+    target_compile_definitions(pi-pico-scope PRIVATE LCD_USE_SOFT_SPI=1 LCD_SOFT_SPI_HALF_PERIOD_US=2)
+endif()
+if(PI_PICO_SCOPE_REFERENCE_SPI_PROBE)
+    target_compile_definitions(pi-pico-scope PRIVATE LCD_SPI_BAUD_HZ=20000000u LCD_USE_SOFT_SPI=0)
+endif()
+if(PI_PICO_SCOPE_CONSTANT_COLOR_TEST)
+    target_compile_definitions(pi-pico-scope PRIVATE LCD_SPI_BAUD_HZ=20000000u LCD_USE_SOFT_SPI=0)
+endif()
 
 target_include_directories(pi-pico-scope PRIVATE src)
 

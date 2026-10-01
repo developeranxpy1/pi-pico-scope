@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#define LCD_W 240
-#define LCD_H 240
+#define LCD_W 160
+#define LCD_H 128
 
 #define ST7789_BLACK   0x0000
 #define ST7789_WHITE   0xFFFF
@@ -19,5 +19,6 @@
 void panelInit(void);
 void panelFlush(void);
 void panelSelfTest(void);
+void panelProbe(void);
 
 #endif

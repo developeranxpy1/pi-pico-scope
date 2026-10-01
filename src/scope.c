@@ -4,6 +4,7 @@
 #include <hardware/irq.h>
 #include <hardware/sync.h>
 #include <hardware/watchdog.h>
+#include <pico/time.h>
 
 #include <string.h>
 
@@ -71,8 +72,10 @@ void scopeInit(void)
     adc_select_input(0);
     adc_fifo_setup(true, true, 1, false, false);
 
+    dma_channel_claim(CAPTURE_DMA_CHANNEL);
     dma_channel_set_irq1_enabled(CAPTURE_DMA_CHANNEL, true);
     irq_set_exclusive_handler(dma_get_irq_num(1), captureDmaIrq);
+    irq_set_enabled(dma_get_irq_num(1), true);
 #endif
 
     panelInit();
@@ -105,16 +108,15 @@ void sample(void)
 
     adc_run(true);
 
-    for (uint32_t guard = 0; !captureDone && guard < 4000000u; guard++)
+    uint32_t deadline = time_us_32() + 100000u;
+    while (!captureDone && (int32_t)(time_us_32() - deadline) < 0)
     {
-        __wfe();
     }
 
     captureTimedOut = !captureDone;
-    if (captureTimedOut)
-        captureDone = 1;
-
     adc_run(false);
+    if (captureTimedOut)
+        dma_channel_abort(CAPTURE_DMA_CHANNEL);
     adc_fifo_drain();
 }
 

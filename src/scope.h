@@ -3,9 +3,9 @@
 
 #include "panel.h"
 
-#define PIXDIV 20
+#define PIXDIV 16
 #define XDIV  8
-#define YDIV  8
+#define YDIV  6
 
 #define PLOT_W (PIXDIV * XDIV)
 #define PLOT_H (PIXDIV * YDIV)

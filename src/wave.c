@@ -74,7 +74,11 @@ static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col)
     maxVoltage = LOWER_VOLTAGE;
     minVoltage = UPPER_VOLTAGE;
 
-    for (int i = 0; i < BUFFER_LEN / 2 && i < PLOT_W; i++)
+    int samplesToDraw = BUFFER_LEN - trig - 1;
+    if (samplesToDraw > PLOT_W)
+        samplesToDraw = PLOT_W;
+
+    for (int i = 0; i < samplesToDraw; i++)
     {
         float voltage1 = atten * frontendVoltage(buf[i + trig]);
         float voltage2 = atten * frontendVoltage(buf[i + trig + 1]);

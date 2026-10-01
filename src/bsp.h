@@ -21,10 +21,20 @@
 #define PIN_UART_TX   4
 #define PIN_UART_RX   5
 
+#ifndef LCD_SPI_BAUD_HZ
 #define LCD_SPI_BAUD_HZ      20000000u
-#define LCD_USE_SOFT_SPI     1
-#define ENABLE_CAPTURE       0
-#define LCD_FLUSH_SETTLE_MS  10
+#endif
+
+#ifndef LCD_USE_SOFT_SPI
+#define LCD_USE_SOFT_SPI     0
+#endif
+
+#ifndef LCD_SOFT_SPI_HALF_PERIOD_US
+#define LCD_SOFT_SPI_HALF_PERIOD_US 0
+#endif
+
+#define ENABLE_CAPTURE       1
+#define LCD_FLUSH_SETTLE_MS  0
 #define UART_BAUD            9600
 
 void bspInit(void);
@@ -40,7 +50,9 @@ void bspLcdSelect(bool select);
 void bspLcdReset(bool release);
 void bspLcdBacklight(bool on);
 void bspLcdSetDc(uint8_t dc);
+void bspLcdSetSpiMode(uint8_t mode);
 void spi_write_bytes(const void *data, size_t len);
+void bspLcdWriteDma(const void *data, size_t len);
 
 void printFloat(float v, int decimalDigits, char s[]);
 

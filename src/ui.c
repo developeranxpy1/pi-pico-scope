@@ -123,14 +123,8 @@ void autoCal(void)
 void splash(void)
 {
     clearDisplay();
-    drawBitmap((LCD_W - 160) / 2, 24, 160, 128, 160, logo);
+    drawBitmap(0, 0, LCD_W, LCD_H, LCD_W, logo);
     setTextSize(1);
-    setCursor(4, 160);
-    setTextColor(WHITE, BLACK);
-    printString("FW compiled: ");
-    printString(__DATE__);
-    setCursor(4, 174);
-    printString("RP2040 + ST7789 240x240");
     panelFlush();
     bspDelayMs(2000);
 }
@@ -140,47 +134,60 @@ void sideInfo(void)
     char st[15];
 
     setTextSize(1);
-    setTextColor(BLACK, WHITE);
-
-    setCursor(MENU_X + MENU_PAD, 2);
-    printString("Min:");
-    setCursor(MENU_X + MENU_PAD, 34);
-    printString("Max:");
-    setCursor(MENU_X + MENU_PAD, 66);
-    printString("Ppk:");
-    setCursor(MENU_X + MENU_PAD, 98);
-    printString("Freq");
-
-    setTextSize(2);
-    setTextColor(WHITE, BLACK);
-
     printFloat(minVoltage, 1, st);
-    setCursor(MENU_X + MENU_PAD, 14);
+    setTextColor(BLACK, WHITE);
+    setCursor(MENU_X, 1);
+    printString("Min:");
+    setTextColor(WHITE, BLACK);
+    setCursor(MENU_X, 10);
     printString(st);
 
     printFloat(maxVoltage, 1, st);
-    setCursor(MENU_X + MENU_PAD, 46);
+    setTextColor(BLACK, WHITE);
+    setCursor(MENU_X, 21);
+    printString("Max:");
+    setTextColor(WHITE, BLACK);
+    setCursor(MENU_X, 30);
     printString(st);
 
+    setTextColor(BLACK, WHITE);
+    setCursor(MENU_X, 41);
+    printString("Ppk:");
+    setTextColor(WHITE, BLACK);
+    setCursor(MENU_X, 51);
     printFloat(maxVoltage - minVoltage, 1, st);
-    setCursor(MENU_X + MENU_PAD, 78);
     printString(st);
     printString("V");
 
-    printFreq();
-
-    setTextSize(1);
-    setCursor(MENU_X + MENU_PAD, 144);
-    if (trigged)
+    setTextColor(BLACK, WHITE);
+    setCursor(MENU_X, 61);
+    printString("Freq");
+    setTextColor(WHITE, BLACK);
+    setCursor(MENU_X, 71);
+    if (measuredFreq >= 1000)
     {
-        setTextColor(ST7789_GREEN, BLACK);
-        printString("Trig");
+        if (measuredFreq >= 100000)
+            printInt((int)measuredFreq / 1000);
+        else
+        {
+            printFloat(measuredFreq / 1000, 1, st);
+            printString(st);
+        }
+        setCursor(MENU_X, 81);
+        printString("kHz");
     }
     else
     {
+        printInt((int)measuredFreq);
+        setCursor(MENU_X, 81);
+        printString("Hz");
+    }
+
+    if (trigged)
+    {
         setTextColor(ST7789_GREEN, BLACK);
-        setTextSize(1);
-        printString("----");
+        setCursor(MENU_X, 91);
+        printString("Trig");
     }
     setTextColor(WHITE, BLACK);
 }
@@ -190,7 +197,183 @@ void settingsBar(void)
     static uint8_t sel = 0;
     char st[15];
 
-    const int colX[5] = {2, 50, 98, 146, 194};
+    setTextSize(1);
+    if (topClip || bottomClip)
+        setTextColor(ST7789_RED, BLACK);
+    else
+        setTextColor(WHITE, BLACK);
+    setCursor(0, 105);
+    printString("Vdiv");
+
+    setTextColor(WHITE, BLACK);
+    setCursor(30, 105);
+    printString("Trig");
+    setCursor(60, 105);
+    printString("Slope");
+    setCursor(95, 105);
+    printString("Atten");
+    setCursor(130, 105);
+    if (tdiv < 100)
+        printString("us/d");
+    else
+        printString("ms/d");
+
+    if (sel == 0)
+    {
+        if (topClip || bottomClip)
+            setTextColor(ST7789_RED, ST7789_WHITE);
+        else
+            setTextColor(ST7789_BLACK, ST7789_WHITE);
+    }
+    printFloat(vdiv, 1, st);
+    setCursor(0, 115);
+    printString(st);
+    printString("V");
+
+    setTextColor(WHITE, BLACK);
+    if (sel == 1)
+    {
+        setTextColor(BLACK, WHITE);
+        drawFastHLine(0, (int16_t)((PIXDIV * YDIV / 2 - 1) - (trigVoltage * PIXDIV / vdiv)), PLOT_W, ST7789_RED);
+    }
+    printFloat(trigVoltage, 1, st);
+    setCursor(30, 115);
+    printString(st);
+
+    setTextColor(WHITE, BLACK);
+    if (sel == 2)
+        setTextColor(BLACK, WHITE);
+    setCursor(60, 115);
+    if (trig == RISING)
+        printString("Rise");
+    else
+        printString("Fall");
+
+    setTextColor(WHITE, BLACK);
+    if (sel == 3)
+        setTextColor(BLACK, WHITE);
+    setCursor(95, 115);
+    printInt(atten);
+    printString("x");
+
+    setTextColor(WHITE, BLACK);
+    if (sel == 4)
+        setTextColor(BLACK, WHITE);
+    setCursor(130, 115);
+    if (tdiv < 100)
+        printInt((int)tdiv);
+    else if (tdiv < 1000)
+    {
+        printString("0.");
+        printInt((int)tdiv / 100);
+    }
+    else
+        printInt((int)tdiv / 1000);
+
+    if (bspButtonDown(PIN_BTN_UP))
+    {
+        if (sel == 0)
+        {
+            if (vdiv > 0.5)
+                vdiv -= 0.5;
+        }
+        else if (sel == 1)
+        {
+            trigVoltage -= 0.1;
+        }
+        else if (sel == 2)
+        {
+            trig = FALLING;
+        }
+        else if (sel == 3)
+        {
+            atten = 1;
+        }
+        else if (sel == 4)
+        {
+            if (tdiv > 1000)
+                tdiv -= 1000;
+            else if (tdiv > 100)
+                tdiv -= 100;
+            else if (tdiv > 10)
+                tdiv -= 10;
+            scopeSetTdiv((uint32_t)((PIXDIV * 1000000.0f) / tdiv));
+        }
+        bspDelayMs(150);
+    }
+
+    if (bspButtonDown(PIN_BTN_DOWN))
+    {
+        if (sel == 0)
+        {
+            if (vdiv < 9)
+                vdiv += 0.5;
+        }
+        else if (sel == 1)
+        {
+            trigVoltage += 0.1;
+        }
+        else if (sel == 2)
+        {
+            trig = RISING;
+        }
+        else if (sel == 3)
+        {
+            atten = 10;
+        }
+        else if (sel == 4)
+        {
+            if (tdiv >= 1000)
+                tdiv += 1000;
+            else if (tdiv >= 100)
+                tdiv += 100;
+            else
+                tdiv += 10;
+            scopeSetTdiv((uint32_t)((PIXDIV * 1000000.0f) / tdiv));
+        }
+        bspDelayMs(150);
+    }
+
+    if (bspButtonDown(PIN_BTN_SEL))
+    {
+        sel++;
+        bspDelayMs(150);
+    }
+    if (sel > 4)
+        sel = 0;
+}
+
+/*
+    printFloat(minVoltage, 1, st);
+    setCursor(MENU_X + MENU_PAD, 12);
+    printString(st);
+
+    printFloat(maxVoltage, 1, st);
+    setCursor(MENU_X + MENU_PAD, 36);
+    printString(st);
+
+    printFloat(maxVoltage - minVoltage, 1, st);
+    setCursor(MENU_X + MENU_PAD, 60);
+    printString(st);
+
+    setCursor(MENU_X + MENU_PAD, 84);
+    if (measuredFreq >= 1000)
+    {
+        printInt((int)(measuredFreq / 1000));
+        printString("k");
+    }
+    else
+        printInt((int)measuredFreq);
+
+    setTextColor(WHITE, BLACK);
+}
+
+void settingsBar(void)
+{
+    static uint8_t sel = 0;
+    char st[15];
+
+    const int colX[5] = {0, 32, 64, 96, 128};
 
     setTextSize(1);
     if (sel == 0)
@@ -200,24 +383,21 @@ void settingsBar(void)
     else
         setTextColor(WHITE, BLACK);
 
-    setCursor(colX[0], BAR_Y + 6);
-    printString("Vdiv");
+    setCursor(colX[0], BAR_Y + 1);
+    printString("V");
 
     setTextColor(WHITE, BLACK);
-    setCursor(colX[1], BAR_Y + 6);
-    printString("Trig");
+    setCursor(colX[1], BAR_Y + 1);
+    printString("T");
 
-    setCursor(colX[2], BAR_Y + 6);
-    printString("Slope");
+    setCursor(colX[2], BAR_Y + 1);
+    printString("S");
 
-    setCursor(colX[3], BAR_Y + 6);
-    printString("Atten");
+    setCursor(colX[3], BAR_Y + 1);
+    printString("A");
 
-    setCursor(colX[4], BAR_Y + 6);
-    if (tdiv < 1000)
-        printString("us/d");
-    else
-        printString("ms/d");
+    setCursor(colX[4], BAR_Y + 1);
+    printString("D");
 
     if (sel == 1)
     {
@@ -225,13 +405,13 @@ void settingsBar(void)
         drawFastHLine(0, (int16_t)((PIXDIV * YDIV / 2 - 1) - (trigVoltage * PIXDIV / vdiv)), PLOT_W, ST7789_RED);
     }
 
-    setTextSize(2);
+    setTextSize(1);
     setTextColor(WHITE, BLACK);
 
     if (sel == 0)
         setTextColor(BLACK, WHITE);
     printFloat(vdiv, 1, st);
-    setCursor(colX[0], BAR_Y + 18);
+    setCursor(colX[0], BAR_Y + 11);
     printString(st);
     printString("V");
 
@@ -239,13 +419,13 @@ void settingsBar(void)
     if (sel == 1)
         setTextColor(BLACK, WHITE);
     printFloat(trigVoltage, 1, st);
-    setCursor(colX[1], BAR_Y + 18);
+    setCursor(colX[1], BAR_Y + 11);
     printString(st);
 
     setTextColor(WHITE, BLACK);
     if (sel == 2)
         setTextColor(BLACK, WHITE);
-    setCursor(colX[2], BAR_Y + 18);
+    setCursor(colX[2], BAR_Y + 11);
     if (trig == RISING)
         printString("Rise");
     else
@@ -254,41 +434,30 @@ void settingsBar(void)
     setTextColor(WHITE, BLACK);
     if (sel == 3)
         setTextColor(BLACK, WHITE);
-    setCursor(colX[3], BAR_Y + 18);
+    setCursor(colX[3], BAR_Y + 11);
     printInt(atten);
     printString("x");
 
     setTextColor(WHITE, BLACK);
     if (sel == 4)
         setTextColor(BLACK, WHITE);
-    setCursor(colX[4], BAR_Y + 18);
+    setCursor(colX[4], BAR_Y + 11);
     if (tdiv < 1000)
+    {
         printInt((int)tdiv);
+        printString("u");
+    }
     else
     {
         printFloat(tdiv / 1000.0, 1, st);
         printString(st);
+        printString("m");
     }
 
     setTextSize(1);
     setTextColor(WHITE, BLACK);
-    setCursor(2, BAR_Y + 44);
-    printString("Sample rate: ");
-    if (sampRate >= 1000000)
-    {
-        printInt((int)(sampRate / 1000000));
-        printString(".");
-        printInt((int)((sampRate % 1000000) / 100000));
-        printString(" MSa/s");
-    }
-    else
-    {
-        printInt((int)(sampRate / 1000));
-        printString(" kSa/s");
-    }
-
-    setCursor(2, BAR_Y + 58);
-    printString("Up/Down: change   Select: next");
+    setCursor(0, BAR_Y + 22);
+    printString("U/D edit SEL next");
 
     if (bspButtonDown(PIN_BTN_UP))
     {
@@ -360,6 +529,7 @@ void settingsBar(void)
     if (sel > 4)
         sel = 0;
 }
+*/
 
 void ui(void)
 {

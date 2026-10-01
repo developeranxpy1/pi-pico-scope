@@ -1,6 +1,7 @@
 #include "bsp.h"
 
 #include <hardware/gpio.h>
+#include <hardware/dma.h>
 #include <hardware/irq.h>
 #include <hardware/spi.h>
 #include <hardware/timer.h>
@@ -9,6 +10,7 @@
 
 
 static spi_inst_t *const lcdSpi = spi0;
+#define LCD_DMA_CHANNEL 0
 
 static void uartIrqHandler(void)
 {
@@ -43,9 +45,10 @@ void bspInit(void)
     gpio_put(PIN_LCD_MOSI, 0);
 #else
     spi_init(lcdSpi, LCD_SPI_BAUD_HZ);
-    spi_set_format(lcdSpi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    bspLcdSetSpiMode(0);
     gpio_set_function(PIN_LCD_MOSI, GPIO_FUNC_SPI);
     gpio_set_function(PIN_LCD_SCK, GPIO_FUNC_SPI);
+    dma_channel_claim(LCD_DMA_CHANNEL);
 #endif
 
     gpio_init(PIN_LCD_CS);
@@ -93,6 +96,18 @@ void bspLcdSetDc(uint8_t dc)
     gpio_put(PIN_LCD_DC, dc);
 }
 
+void bspLcdSetSpiMode(uint8_t mode)
+{
+#if LCD_USE_SOFT_SPI
+    (void)mode;
+#else
+    if (mode)
+        spi_set_format(lcdSpi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    else
+        spi_set_format(lcdSpi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+#endif
+}
+
 void spi_write_bytes(const void *data, size_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
@@ -104,12 +119,38 @@ void spi_write_bytes(const void *data, size_t len)
         for (int bit = 7; bit >= 0; bit--)
         {
             gpio_put(PIN_LCD_MOSI, (b >> bit) & 1u);
+#if LCD_SOFT_SPI_HALF_PERIOD_US
+            busy_wait_us_32(LCD_SOFT_SPI_HALF_PERIOD_US);
+#endif
             gpio_put(PIN_LCD_SCK, 1);
+#if LCD_SOFT_SPI_HALF_PERIOD_US
+            busy_wait_us_32(LCD_SOFT_SPI_HALF_PERIOD_US);
+#endif
             gpio_put(PIN_LCD_SCK, 0);
         }
     }
 #else
     spi_write_blocking(lcdSpi, p, len);
+#endif
+}
+
+void bspLcdWriteDma(const void *data, size_t len)
+{
+#if LCD_USE_SOFT_SPI
+    spi_write_bytes(data, len);
+#else
+    dma_channel_config_t cfg = dma_channel_get_default_config(LCD_DMA_CHANNEL);
+    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
+    channel_config_set_read_increment(&cfg, true);
+    channel_config_set_write_increment(&cfg, false);
+    channel_config_set_dreq(&cfg, spi_get_dreq(lcdSpi, true));
+
+    dma_channel_configure(LCD_DMA_CHANNEL, &cfg, &spi_get_hw(lcdSpi)->dr,
+                          data, dma_encode_transfer_count((uint)len), true);
+    dma_channel_wait_for_finish_blocking(LCD_DMA_CHANNEL);
+    while (spi_is_busy(lcdSpi))
+    {
+    }
 #endif
 }
 

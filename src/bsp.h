@@ -13,6 +13,9 @@
 #define PIN_LCD_BL    0
 
 #define PIN_ADC_IN    26
+#define PIN_ADC_IN2   27
+#define PIN_ADC_IN3   28
+#define PIN_ADC_IN4   29
 #define PIN_BTN_UP    15
 #define PIN_BTN_SEL   16
 #define PIN_BTN_DOWN  17

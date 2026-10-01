@@ -13,6 +13,8 @@ option(PI_PICO_SCOPE_PANEL_PROBE "Run ST7789 display probe at boot" OFF)
 option(PI_PICO_SCOPE_SLOW_SPI_PROBE "Use 250 kHz software SPI for the panel probe" OFF)
 option(PI_PICO_SCOPE_REFERENCE_SPI_PROBE "Use 20 MHz hardware SPI0 for the panel probe" OFF)
 option(PI_PICO_SCOPE_CONSTANT_COLOR_TEST "Run the minimal reference color loop" OFF)
+option(PI_PICO_SCOPE_DUAL_ADC "Capture CH1 (GP26) and CH2 (GP27) interleaved" OFF)
+option(PI_PICO_SCOPE_LOGIC_ANALYSER "Digital lane mode instead of the analog trace" OFF)
 
 if(PI_PICO_SCOPE_CONSTANT_COLOR_TEST)
     set(PI_PICO_SCOPE_SOURCES
@@ -45,6 +47,15 @@ if(NOT FW_GIT_SHA)
 endif()
 
 target_compile_definitions(pi-pico-scope PRIVATE FW_VERSION="${FW_GIT_SHA}")
+
+# Dual channel and logic analyser are opt-in: with both off the firmware is the
+# original single-channel analog scope, byte-for-byte identical to before.
+if(PI_PICO_SCOPE_DUAL_ADC)
+    target_compile_definitions(pi-pico-scope PRIVATE ADC_CHANNELS=2)
+endif()
+if(PI_PICO_SCOPE_LOGIC_ANALYSER)
+    target_compile_definitions(pi-pico-scope PRIVATE LOGIC_ANALYSER=1)
+endif()
 if(PI_PICO_SCOPE_PANEL_PROBE)
     target_compile_definitions(pi-pico-scope PRIVATE PI_PICO_SCOPE_PANEL_PROBE=1)
 endif()

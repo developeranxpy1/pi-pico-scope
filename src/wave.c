@@ -3,6 +3,11 @@
 #include "wave.h"
 
 #define WAVE_COLOR ST7789_YELLOW
+#define WAVE2_COLOR ST7789_CYAN
+
+/* Interleaved capture accessor. With ADC_CHANNELS == 1 this collapses to
+   buf[i], so the original single-channel path is byte-for-byte unchanged. */
+#define CH_SAMP(buf, i, ch) ((buf)[((i) * ADC_CHANNELS) + (ch)])
 
 /* Trigger hysteresis in ADC counts. Rejects single-sample noise near the
    threshold: simulated jitter in the trigger point drops from ~19 samples to
@@ -11,7 +16,8 @@
    counts a 30-count signal stopped triggering entirely. */
 #define TRIG_HYST 32
 
-extern uint16_t adcBuf[BUFFER_LEN];
+extern uint16_t adcBuf[CAPTURE_LEN];
+extern uint8_t trigChannel;
 extern int atten;
 extern float vdiv;
 extern float trigVoltage;
@@ -76,10 +82,14 @@ static void dottedVLine(int x, int y, int l)
     }
 }
 
-static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col)
+static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col, uint8_t ch,
+                      int updateStats)
 {
-    maxVoltage = LOWER_VOLTAGE;
-    minVoltage = UPPER_VOLTAGE;
+    if (updateStats)
+    {
+        maxVoltage = LOWER_VOLTAGE;
+        minVoltage = UPPER_VOLTAGE;
+    }
 
     int samplesToDraw = BUFFER_LEN - trig - 1;
     /* drawLine(i, .., i + 1, ..) paints x = samplesToDraw, so clamping to
@@ -92,12 +102,15 @@ static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col)
 
     for (int i = 0; i < samplesToDraw; i++)
     {
-        float voltage1 = atten * frontendVoltage(buf[i + trig]);
-        float voltage2 = atten * frontendVoltage(buf[i + trig + 1]);
-        if (voltage2 > maxVoltage)
-            maxVoltage = voltage2;
-        if (voltage2 < minVoltage)
-            minVoltage = voltage2;
+        float voltage1 = atten * frontendVoltage(CH_SAMP(buf, i + trig, ch));
+        float voltage2 = atten * frontendVoltage(CH_SAMP(buf, i + trig + 1, ch));
+        if (updateStats)
+        {
+            if (voltage2 > maxVoltage)
+                maxVoltage = voltage2;
+            if (voltage2 < minVoltage)
+                minVoltage = voltage2;
+        }
 
         int16_t y1 = (PIXDIV * YDIV / 2 - 1) - (voltage1 * PIXDIV / vdiv);
         int16_t y2 = (PIXDIV * YDIV / 2 - 1) - (voltage2 * PIXDIV / vdiv);
@@ -125,13 +138,77 @@ static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col)
     }
 }
 
+#if LOGIC_ANALYSER
+#define LOGIC_COLOR ST7789_GREEN
+#define LOGIC_TRIGGER_COLOR ST7789_RED
+
+/* Digital lane display. Each lane is a square wave: a high level drawn near the
+   top of its band, a low level near the bottom, with the transition drawn
+   vertically. Thresholding the ADC round-robin keeps the timing jitter-free,
+   which matters far more for digital than it does for analog. */
+static void drawLogicTrace(const uint16_t *buf, uint16_t trig)
+{
+    const int laneH = PLOT_H / LOGIC_LANES;
+    int samplesToDraw = BUFFER_LEN - trig - 1;
+    if (samplesToDraw > PLOT_W - 1)
+        samplesToDraw = PLOT_W - 1;
+
+    static const char laneName[LOGIC_LANES][3] = {"26", "27", "28", "29"};
+
+    for (int lane = 0; lane < LOGIC_LANES; lane++)
+    {
+        int top = lane * laneH + 2;
+        int bot = (lane + 1) * laneH - 2;
+        int lastX = -1;
+        uint8_t lastState = 0;
+
+        for (int i = 0; i < samplesToDraw; i++)
+        {
+            uint16_t s = buf[(i + trig) * LOGIC_LANES + lane];
+            uint8_t state = (s >= LOGIC_THRESHOLD) ? 1 : 0;
+            int y = state ? top : bot;
+
+            if (lastX >= 0 && state != lastState)
+                drawFastVLine(i, state ? top : bot, bot - top, LOGIC_TRIGGER_COLOR);
+            drawPixel(i, y, LOGIC_COLOR);
+            lastState = state;
+            lastX = i;
+        }
+
+        setTextColor(ST7789_WHITE, ST7789_BLACK);
+        setTextSize(1);
+        setCursor(0, lane * laneH + 1);
+        printString(laneName[lane]);
+    }
+    setTextColor(ST7789_WHITE, ST7789_BLACK);
+}
+
+void traceScreen(void)
+{
+#if LOGIC_ANALYSER
+    drawLogicTrace(adcBuf, trigPoint);
+#else
+    drawGraticule(XDIV, YDIV, PIXDIV);
+    drawTrace(adcBuf, trigPoint, WAVE_COLOR, trigChannel, 1);
+#if ADC_CHANNELS >= 2
+    drawTrace(adcBuf, trigPoint, WAVE2_COLOR, (uint8_t)(1 - trigChannel), 0);
+#endif
+#endif
+}
+#else
 void traceScreen(void)
 {
     drawGraticule(XDIV, YDIV, PIXDIV);
-    drawTrace(adcBuf, trigPoint, WAVE_COLOR);
+    /* Stats come from the trigger channel only, so the readings stay tied to
+       one signal instead of flickering between two. */
+    drawTrace(adcBuf, trigPoint, WAVE_COLOR, trigChannel, 1);
+#if ADC_CHANNELS >= 2
+    drawTrace(adcBuf, trigPoint, WAVE2_COLOR, (uint8_t)(1 - trigChannel), 0);
+#endif
 }
+#endif
 
-void findTrigger(uint16_t *buf)
+void findTrigger(uint16_t *buf, uint8_t ch)
 {
     int trigLevel = (int)((4096.0 * (trigVoltage / (2.0 * atten) + offsetVoltage)) / 3.3);
     int trigPoint2;
@@ -146,14 +223,15 @@ void findTrigger(uint16_t *buf)
     trigged = 0;
     measuredFreq = 0;
 
-    int armed = (trig == RISING) ? (buf[0] < trigLevel - hyst)
-                                 : (buf[0] > trigLevel + hyst);
+    int armed = (trig == RISING) ? (CH_SAMP(buf, 0, ch) < trigLevel - hyst)
+                                 : (CH_SAMP(buf, 0, ch) > trigLevel + hyst);
 
     for (int i = 1; i < BUFFER_LEN / 2 && trigged != 2; i++)
     {
-        int crossed = (trig == RISING)
-                          ? (buf[i] >= trigLevel && buf[i - 1] < trigLevel)
-                          : (buf[i] <= trigLevel && buf[i - 1] > trigLevel);
+        uint16_t cur = CH_SAMP(buf, i, ch);
+        uint16_t prev = CH_SAMP(buf, i - 1, ch);
+        int crossed = (trig == RISING) ? (cur >= trigLevel && prev < trigLevel)
+                                       : (cur <= trigLevel && prev > trigLevel);
 
         if (armed && crossed)
         {
@@ -170,7 +248,7 @@ void findTrigger(uint16_t *buf)
             }
         }
 
-        if ((trig == RISING) ? (buf[i] < trigLevel - hyst) : (buf[i] > trigLevel + hyst))
+        if ((trig == RISING) ? (cur < trigLevel - hyst) : (cur > trigLevel + hyst))
             armed = 1;
     }
 

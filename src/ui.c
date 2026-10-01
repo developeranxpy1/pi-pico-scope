@@ -11,7 +11,8 @@
 #define BLACK ST7789_BLACK
 #define WHITE ST7789_WHITE
 
-extern uint16_t adcBuf[BUFFER_LEN];
+extern uint16_t adcBuf[CAPTURE_LEN];
+extern uint8_t trigChannel;
 extern int atten;
 extern float vdiv;
 extern float trigVoltage;
@@ -91,8 +92,10 @@ void autoCal(void)
     setTextColor(WHITE, BLACK);
 
     uint32_t adcAvg = 0;
+    /* Offset is calibrated from CH1 only; averaging the interleaved buffer
+       would fold CH2 in whenever ADC_CHANNELS > 1. */
     for (int i = 0; i < BUFFER_LEN; i++)
-        adcAvg += adcBuf[i];
+        adcAvg += adcBuf[i * ADC_CHANNELS];
     adcAvg /= BUFFER_LEN;
 
     offsetVoltage = adcToVoltage(adcAvg);
@@ -628,7 +631,7 @@ void outputCSV(uint8_t o)
 
     for (int i = 0; i < BUFFER_LEN; i++)
     {
-        float voltage = atten * frontendVoltage(adcBuf[i]);
+        float voltage = atten * frontendVoltage(adcBuf[i * ADC_CHANNELS]);
         printFloat(voltage, 3, st);
         printFloat((float)i * sampPer, 3, s1);
         sprintf(buffer, "%sE-06,%s\n\r", s1, st);
@@ -678,13 +681,13 @@ void outputTek(uint8_t o)
     if (fast)
         for (int i = 0; i < BUFFER_LEN / 2; i++)
         {
-            sprintf(buffer, "%d\n\r", adcBuf[i + trigPoint]);
+            sprintf(buffer, "%d\n\r", adcBuf[(i + trigPoint) * ADC_CHANNELS]);
             outputSerial(buffer, o);
         }
     else
         for (int i = 0; i < BUFFER_LEN; i++)
         {
-            sprintf(buffer, "%d\n\r", adcBuf[i]);
+            sprintf(buffer, "%d\n\r", adcBuf[i * ADC_CHANNELS]);
             outputSerial(buffer, o);
         }
 

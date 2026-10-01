@@ -4,6 +4,13 @@
 
 #define WAVE_COLOR ST7789_YELLOW
 
+/* Trigger hysteresis in ADC counts. Rejects single-sample noise near the
+   threshold: simulated jitter in the trigger point drops from ~19 samples to
+   ~0.5 across amplitudes of 100-700 counts. Must stay well under the signal's
+   downward excursion from the threshold or the trigger never re-arms - at 80
+   counts a 30-count signal stopped triggering entirely. */
+#define TRIG_HYST 32
+
 extern uint16_t adcBuf[BUFFER_LEN];
 extern int atten;
 extern float vdiv;
@@ -75,8 +82,13 @@ static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col)
     minVoltage = UPPER_VOLTAGE;
 
     int samplesToDraw = BUFFER_LEN - trig - 1;
-    if (samplesToDraw > PLOT_W)
-        samplesToDraw = PLOT_W;
+    /* drawLine(i, .., i + 1, ..) paints x = samplesToDraw, so clamping to
+       PLOT_W would draw one column into the stats menu at x = PLOT_W. */
+    if (samplesToDraw > PLOT_W - 1)
+        samplesToDraw = PLOT_W - 1;
+
+    topClip = 0;
+    bottomClip = 0;
 
     for (int i = 0; i < samplesToDraw; i++)
     {
@@ -87,8 +99,6 @@ static void drawTrace(const uint16_t *buf, uint16_t trig, uint16_t col)
         if (voltage2 < minVoltage)
             minVoltage = voltage2;
 
-        topClip = 0;
-        bottomClip = 0;
         int16_t y1 = (PIXDIV * YDIV / 2 - 1) - (voltage1 * PIXDIV / vdiv);
         int16_t y2 = (PIXDIV * YDIV / 2 - 1) - (voltage2 * PIXDIV / vdiv);
         if (y1 > PLOT_H - 1)
@@ -126,14 +136,28 @@ void findTrigger(uint16_t *buf)
     int trigLevel = (int)((4096.0 * (trigVoltage / (2.0 * atten) + offsetVoltage)) / 3.3);
     int trigPoint2;
 
+    /* A bare level crossing retriggers on noise that merely touches the
+       threshold, which makes the trace jump frame to frame. Require the signal
+       to travel TRIG_HYST counts clear of the threshold before it is armed
+       again, so only a real crossing counts. */
+    const int hyst = TRIG_HYST;
+
     trigPoint = 0;
     trigged = 0;
     measuredFreq = 0;
 
+    int armed = (trig == RISING) ? (buf[0] < trigLevel - hyst)
+                                 : (buf[0] > trigLevel + hyst);
+
     for (int i = 1; i < BUFFER_LEN / 2 && trigged != 2; i++)
-        if ((trig == RISING && buf[i] >= trigLevel && buf[i - 1] < trigLevel) ||
-            (trig == FALLING && buf[i] <= trigLevel && buf[i - 1] > trigLevel))
+    {
+        int crossed = (trig == RISING)
+                          ? (buf[i] >= trigLevel && buf[i - 1] < trigLevel)
+                          : (buf[i] <= trigLevel && buf[i - 1] > trigLevel);
+
+        if (armed && crossed)
         {
+            armed = 0;
             if (!trigged)
             {
                 trigPoint = i;
@@ -145,6 +169,10 @@ void findTrigger(uint16_t *buf)
                 trigged = 2;
             }
         }
+
+        if ((trig == RISING) ? (buf[i] < trigLevel - hyst) : (buf[i] > trigLevel + hyst))
+            armed = 1;
+    }
 
     if (trigged == 2)
     {

@@ -108,7 +108,12 @@ void sample(void)
 
     adc_run(true);
 
-    uint32_t deadline = time_us_32() + 100000u;
+    /* The capture takes BUFFER_LEN * sampPer microseconds. At the slowest
+       timebase (10 ms/div) that is 160 ms, so the old fixed 100 ms deadline
+       aborted every capture there and left a half-old buffer on screen. Scale
+       the deadline to the real sample rate and keep headroom for the DMA tail. */
+    uint32_t captureUs = (uint32_t)(sampPer * (float)BUFFER_LEN);
+    uint32_t deadline = time_us_32() + captureUs + 50000u;
     while (!captureDone && (int32_t)(time_us_32() - deadline) < 0)
     {
     }
@@ -116,7 +121,15 @@ void sample(void)
     captureTimedOut = !captureDone;
     adc_run(false);
     if (captureTimedOut)
+    {
         dma_channel_abort(CAPTURE_DMA_CHANNEL);
+        /* A partly filled buffer mixes this frame with the previous one, which
+           reads as a jumping trace. Flatten it to the 0 V line so a dropped
+           capture is obvious instead of showing stale samples. */
+        uint16_t zeroCount = (uint16_t)((4096.0f * offsetVoltage) / 3.3f);
+        for (int i = 0; i < BUFFER_LEN; i++)
+            adcBuf[i] = zeroCount;
+    }
     adc_fifo_drain();
 }
 

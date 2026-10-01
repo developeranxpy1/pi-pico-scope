@@ -72,9 +72,9 @@ to send data to another, using a clock wire to say when each bit goes out.
 | SELECT button | GP16|                             |
 | DOWN button   | GP17|                             |
 | Nav UP        | GP18| Optional 4-way pad            |
-| Nav DOWN      | GP19| Optional 4-way pad            |
-| Nav LEFT      | GP20| Optional 4-way pad            |
-| Nav RIGHT     | GP21| Optional 4-way pad            |
+| Nav LEFT      | GP19| Optional 4-way pad            |
+| Nav RIGHT     | GP20| Optional 4-way pad            |
+| Nav DOWN      | GP21| Optional 4-way pad            |
 | LED           | GP25| Lights up when a signal is found |
 
 
@@ -214,8 +214,14 @@ You have three buttons. Here's the whole thing:
 | **All three** together| Restarts everything from scratch            |
 
 You can also fit a **four-way navigation pad** on **GP18, GP19, GP20 and
-GP21** (in that order: UP, DOWN, LEFT, RIGHT). It is optional — if you don't
-use it, nothing changes.
+GP21**. It is optional — if you don't use it, nothing changes.
+
+```
+        GP18  UP
+   GP19         GP20
+   LEFT         RIGHT
+        GP21  DOWN
+```
 
 | Nav key | What it does                                   |
 |---------|------------------------------------------------|
